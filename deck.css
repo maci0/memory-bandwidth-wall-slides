@@ -948,10 +948,10 @@ body.print *, body.print *::before, body.print *::after, body.motionless #deck,
 .axis2 span { position:absolute; left:calc(var(--x) * 1%); transform:translateX(-50%); color:var(--mute); font-size:15px; white-space:nowrap; }
 .qrow { display:grid; grid-template-columns:420px 1fr 190px; align-items:center; gap:20px; }
 .ql { display:flex; flex-direction:column; gap:2px; } .ql b { font-family:var(--display); font-size:24px; } .ql span { color:var(--soft); font-size:15px; }
-.qtrack { position:relative; height:46px; border-radius:5px; background:var(--track); }
+.qtrack { position:relative; height:46px; border-radius:5px; background:linear-gradient(to right, color-mix(in srgb, var(--fail) 12%, var(--bg)) 0 64.2857%, var(--green-bg) 64.2857% 100%); }
 .qtrack .zero { position:absolute; top:-6px; bottom:-6px; left:71.43%; width:2px; background:var(--ink); }
 .qtrack .qdot { position:absolute; top:11px; left:0; width:100%; height:24px; transition:transform 1.4s var(--ease) .3s; } /* carrier: the dot moves by translateX of the full track */
-.qtrack .qdot::before { content:""; position:absolute; left:calc(71.43% - 12px); top:0; width:24px; height:24px; border-radius:50%; background:var(--steel-fill); }
+.qtrack .qdot::before { content:""; position:absolute; left:calc(71.43% - 12px); top:0; width:24px; height:24px; border-radius:50%; background:var(--quality); }
 .qrow.on .qdot { transform:translateX(calc((var(--x) - 71.43) * 1%)); }
 .qrow em { font-style:normal; font-family:var(--display); font-weight:700; font-size:18px; }
 /* the score change waits for its dot to land */
@@ -1583,3 +1583,11 @@ ol.stage.order { justify-content:center; margin-top:0; gap:12px; }
 .slide:has(.kit.complete-command) { padding-bottom:220px; }
 
 .slide:has(.slabrow) .kit { bottom:54px; }
+
+/* Slide 20: illustrative one-point loss budget; dots remain observed means. */
+.qrow.within { --quality:var(--green); }
+.qrow.outside { --quality:var(--fail); }
+.qtrack::after { content:""; position:absolute; top:-6px; bottom:-6px; left:64.2857%; border-left:1px dashed var(--mute); }
+.qtrack .qdot { z-index:1; }
+.axis2 .budget-cut { color:var(--ink); font-weight:700; }
+.axis2 .baseline { transform:none; }

@@ -493,12 +493,12 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   <p class="kicker">Movement 4 · lever 2 · the quality checks</p>
   <h2>NVFP4 vs bf16: published score changes.</h2>
   <div class="stage gate2">
-    <p class="plain">Score change in percentage points; negative means lower. Aggregate scores alone do not establish unchanged quality.</p>
-    <div class="axis2" data-step="0"><span style="--x:0">−10</span><span style="--x:35.71">−5</span><span style="--x:71.43">0 = bf16</span><span style="--x:100">+4</span></div>
-    <div class="qrow" data-step="1"><div class="ql"><b>MMLU-Pro · knowledge</b><span>Qwen3.8-Flash-Next · 88.5 → 88.2 · 1 seed</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:69.29"></i></div><em class="steel">−0.30 points</em></div>
-    <div class="qrow" data-step="2"><div class="ql"><b>SWE-bench Verified · coding agents</b><span>Qwen3.8-Flash-Next · 80.6 → 79.4 · 500 tasks, 1 seed</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:62.86"></i></div><em class="steel">−1.20 points</em></div>
-    <div class="qrow" data-step="3"><div class="ql"><b>MMLU-Pro · knowledge</b><span>Gemma-4-31B, thinking off · 85.41 → 84.50 · 3-seed mean</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:64.93"></i></div><em class="steel">−0.91 points</em></div>
-    <div class="qrow" data-step="4"><div class="ql"><b>MATH-500 · math</b><span>Gemma-4-31B, thinking off · 89.40 → 85.07 · 500 problems</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:40.5"></i></div><em class="steel">−4.33 points</em></div>
+    <p class="plain">Example budget: <b>at most 1 point loss</b>. <span class="green">Within budget</span> / <span class="fail">over budget</span>.<br>Dots show published means, not certainty about quality.</p>
+    <div class="axis2" data-step="0"><span style="--x:0">−10</span><span style="--x:35.71">−5</span><span class="budget-cut" style="--x:64.29">−1</span><span class="baseline" style="--x:71.43">0 = bf16</span><span style="--x:100">+4</span></div>
+    <div class="qrow within" data-step="1"><div class="ql"><b>MMLU-Pro · knowledge</b><span>Qwen3.8-Flash-Next · 88.5 → 88.2 · 1 seed</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:69.29"></i></div><em class="green">−0.30 points</em></div>
+    <div class="qrow outside" data-step="2"><div class="ql"><b>SWE-bench Verified · coding agents</b><span>Qwen3.8-Flash-Next · 80.6 → 79.4 · 500 tasks, 1 seed</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:62.86"></i></div><em class="fail">−1.20 points</em></div>
+    <div class="qrow within" data-step="3"><div class="ql"><b>MMLU-Pro · knowledge</b><span>Gemma-4-31B, thinking off · 85.41 → 84.50 · 3-seed mean</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:64.93"></i></div><em class="green">−0.91 points</em></div>
+    <div class="qrow outside" data-step="4"><div class="ql"><b>MATH-500 · math</b><span>Gemma-4-31B, thinking off · 89.40 → 85.07 · 500 problems</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:40.5"></i></div><em class="fail">−4.33 points</em></div>
     <p class="say" data-step="5">Different quantized layers. <span class="green">Gate on your workload</span>, not on one exam.</p>
   </div>
   <dl class="kit complete-command" data-step="5"><dt>try</dt><dd>lm-eval run --model local-chat-completions --apply_chat_template \
@@ -506,7 +506,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   <b>--tasks mmlu_pro</b> --num_fewshot 0 --seed 1234 --log_samples --output_path results/baseline</dd><dt>check</dt><dd>repeat both; pair cases/seeds; keep quality loss within your predeclared budget (slide 35)</dd></dl>
   <p class="foot">RedHatAI model cards, evaluated on vLLM: Qwen3.8-Flash-Next-NVFP4 (1 seed, expert linears W4A4); gemma-4-31B-it-NVFP4 (3-seed means, block linears W4A4, lm-eval 0.4.11, zero-shot). No paired uncertainty interval is available here.</p>
   <aside class="notes">
-    <p>Now let's check the answers. These dots show <strong>published score changes</strong> from bf16 to NVFP4. Left of zero means lower; this doesn't establish unchanged quality.</p>
+    <p>Now let's check the answers. These dots show <strong>published score changes</strong> from bf16 to NVFP4. The green band allows one percentage point of loss in this example; red is outside that budget. These means don't establish unchanged quality.</p>
     <p>[click] First, Qwen3.8 Flash Next quantizes only the experts. Its MMLU-Pro knowledge score drops about a third of a point.</p>
     <p>[click] On SWE-bench Verified, where coding agents fix GitHub issues, it loses one point two percentage points across five hundred tasks. That's <strong>one run</strong>.</p>
     <p>[click] Now dense Gemma 4 31B: reasoning off, main matrix operations quantized. Over three seeds, its knowledge score drops about a point.</p>
