@@ -1118,7 +1118,7 @@ body.print *, body.print *::before, body.print *::after, body.motionless #deck,
 .fieldkit { display:flex; flex-direction:column; justify-content:center; }
 .fieldkit + .say { margin-bottom:28px; }
 .fieldkit .code { font-size:15.5px; line-height:1.7; }
-.fieldkit .code > span { display:block; }
+.fieldkit .code > span[data-step] { display:block; }
 .kpis .code.metrics { grid-column:1 / -1; font-size:14px; margin-top:6px; }
 .tq { display:flex; flex-direction:column; gap:14px; }
 .tq .hb.on .b i { transform:scaleX(calc(var(--w) / 2.4)); }
@@ -1574,3 +1574,12 @@ ol.stage.order { justify-content:center; margin-top:0; gap:12px; }
 @keyframes life-stream { 0%, 10%, 100% { opacity:0; transform:translateX(-6px); } 25%, 85% { opacity:1; transform:none; } }
 @keyframes life-stream-second { 0%, 30%, 100% { opacity:0; transform:translateX(-6px); } 45%, 85% { opacity:1; transform:none; } }
 @keyframes life-stream-third { 0%, 50%, 100% { opacity:0; transform:translateX(-6px); } 65%, 85% { opacity:1; transform:none; } }
+
+/* Complete examples stay legible alongside their explanation. */
+.fieldkit.self-contained { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:auto auto; gap:14px; align-content:center; }
+.fieldkit.self-contained .code { min-width:0; font-size:13.5px; line-height:1.35; padding:12px; }
+.fieldkit.self-contained .bytes { grid-row:1 / 3; }
+.kit.complete-command dd { min-width:0; overflow-wrap:anywhere; white-space:pre-wrap; font-size:13.5px; line-height:1.4; overflow:visible; }
+.slide:has(.kit.complete-command) { padding-bottom:220px; }
+
+.slide:has(.slabrow) .kit { bottom:54px; }

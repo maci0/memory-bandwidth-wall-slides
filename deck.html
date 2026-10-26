@@ -206,7 +206,12 @@
       <div class="verdict hot swap-in" data-step="2"><b>High MBU</b><span>The bus is likely the limit. Confirm in a profile before you stop tuning overhead. Fewer bytes still raise tok/s.</span></div>
     </div>
   </div>
-  <dl class="kit" data-step="1"><dt>try</dt><dd>nsys profile --capture-range=cudaProfilerApi … vllm serve … <b>--profiler-config.profiler cuda</b></dd><dt>check</dt><dd>vllm bench serve … --profile, then nsys stats: which kernels, and the gaps between them</dd></dl>
+  <dl class="kit complete-command" data-step="1"><dt>try</dt><dd>VLLM_WORKER_MULTIPROC_METHOD=spawn nsys profile \
+  --trace-fork-before-exec=true --cuda-graph-trace=node \
+  --capture-range=cudaProfilerApi --capture-range-end repeat \
+  vllm serve Qwen/Qwen3.8-27B <b>--profiler-config.profiler cuda</b></dd><dt>check</dt><dd>vllm bench serve --backend vllm --model Qwen/Qwen3.8-27B --dataset-name random \
+  --random-input-len 1024 --random-output-len 512 --num-prompts 2 --max-concurrency 1 --profile
+nsys stats report1.nsys-rep</dd></dl>
   <p class="foot">Model bandwidth utilization (MBU), Databricks 2023. Short-context, one-user estimate; not a hardware-counter reading. No universal stop-tuning percentage.</p>
   <aside class="notes">
     <p>We've estimated a ceiling. Now let's compare it with what the server actually does. <strong>At short context</strong>, divide one-user tokens per second by that ceiling. That's model bandwidth utilization, or MBU.</p>
@@ -218,22 +223,39 @@
 <section class="slide" data-move="2" data-seconds="85" data-coach="Start the running Spark case: optional defaults off, 222.5 ms to 4.49 tok/s to about 84% estimated weight MBU. Explain the 5.33 ceiling first. Point to commands; do not read flags aloud.">
   <p class="kicker">Movement 2 · field kit: measure MBU</p>
   <h2>Measure your MBU in five minutes.</h2>
-  <div class="stage fieldkit">
-    <div class="ksteps" aria-hidden="true">
-      <div class="ks" data-step="0"><span class="files"><i></i><i></i><i></i></span><b>bytes</b><span>weights read per step</span></div>
-      <div class="ks" data-step="1"><span class="gap"><i></i><em></em><i></i></span><b>token gap</b><span>time per output token</span></div>
-      <div class="ks" data-step="2"><span class="div">÷</span><b>divide</b><span>measured speed ÷ ceiling</span></div>
-    </div>
-    <pre class="code"><span data-step="0"><span class="cm"># 1 · Qwen3.8-27B: estimated text-decode weight read 51.25 GB; files 55.56 GB</span>
-python3 weight-accounting.py /path/to/pinned/snapshot  <span class="cm"># script in handout</span>
-<span class="cm"># Spark: 273 GB/s ÷ 51.25 GB ≈ 5.33 tok/s</span>
-</span><span data-step="1"><span class="cm"># 2 · quick check against the warm Spark server; full saved-prompt runs in handout</span>
-vllm bench serve --backend vllm --model qwen38 --tokenizer Qwen/Qwen3.8-27B \
-  --port 18082 --dataset-name random --seed 1234 \
+  <div class="stage fieldkit self-contained">
+    <pre class="code bytes" data-step="0"># 1 · Cached, pinned bf16 model; no weight download
+python3 - &lt;&lt;&#x27;PYCODE&#x27;
+import json
+from pathlib import Path
+from huggingface_hub import snapshot_download
+root = Path(snapshot_download(&quot;Qwen/Qwen3.8-27B&quot;,
+    revision=&quot;1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0&quot;,
+    local_files_only=True))
+weights = 0
+for file in root.glob(&quot;*.safetensors&quot;):
+    with file.open(&quot;rb&quot;) as f:
+        size = int.from_bytes(f.read(8), &quot;little&quot;)
+        header = json.loads(f.read(size))
+    for name, t in header.items():
+        if name == &quot;__metadata__&quot; or name.startswith(
+                (&quot;model.visual.&quot;, &quot;mtp.&quot;)): continue
+        lo, hi = t[&quot;data_offsets&quot;]
+        weights += (t[&quot;shape&quot;][1] * 2 if name.endswith(
+            &quot;embed_tokens.weight&quot;) else hi - lo)
+print(f&quot;{weights / 1e9:.2f} GB; {273e9 / weights:.2f} tok/s&quot;)
+PYCODE</pre>
+    <pre class="code bench" data-step="1"># 2 · Warm server: qwen38 on port 18082
+vllm bench serve --backend vllm --model qwen38 \
+  --tokenizer Qwen/Qwen3.8-27B --port 18082 \
+  --dataset-name random --seed 1234 \
   --random-input-len 128 --random-output-len 128 \
-  --max-concurrency 1 --num-prompts 4 --num-warmups 1 --ignore-eos --temperature 0
-</span><span data-step="2"><span class="cm"># 3 · short-context, one-user estimate</span>
-MBU = (1000 ÷ <b>Mean TPOT</b> in milliseconds) ÷ (memory bytes/s ÷ estimated weight bytes/step)</span></pre>
+  --max-concurrency 1 --num-prompts 4 \
+  --num-warmups 1 --ignore-eos --temperature 0</pre>
+    <pre class="code calculation" data-step="2"># 3 · Use Mean TPOT, not aggregate output tok/s
+ceiling = 273 GB/s ÷ 51.25 GB = 5.33 tok/s
+measured = 1000 ÷ 222.5 ms = 4.49 tok/s
+MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </div>
   <p class="say" data-step="2">Spark · untuned baseline: <b>222.5 ms</b> TPOT ≈ <b>4.49 tok/s</b> ÷ 5.33 ≈ <b>84% MBU</b>.</p>
   <p class="foot">DGX Spark · Qwen3.8-27B bf16 · vLLM 0.32.0 · 25 Oct 2026. Median: 3 × 16 saved coding prompts, 128 output tokens. Eager, prefix/chunking off. Weight estimate omits vision, MTP, full input embeddings and KV/state traffic. 273 GB/s: NVIDIA. Warm-server diagnostic above; exact runs: handout.</p>
@@ -417,7 +439,7 @@ MBU = (1000 ÷ <b>Mean TPOT</b> in milliseconds) ÷ (memory bytes/s ÷ estimated
     </div>
   </div>
   <p class="say" data-step="1">More <span class="green">capacity</span>, with <span class="steel">transfer time</span> to pay. Reload only when the transfer beats the recompute: measure it.</p>
-  <dl class="kit"><dt>try</dt><dd>LMCache MP (a separate cache process) · <b>--mamba-cache-mode align</b> · Qwen disk recipe: handout</dd><dt>check</dt><dd>sum(rate(vllm:external_prefix_cache_hits_total[5m])) / sum(rate(vllm:external_prefix_cache_queries_total[5m]))</dd></dl>
+  <dl class="kit"><dt>try</dt><dd>LMCache MP · <b>--mamba-cache-mode align</b> · long disk-setup recipe: handout</dd><dt>check</dt><dd>sum(rate(vllm:external_prefix_cache_hits_total[5m])) / sum(rate(vllm:external_prefix_cache_queries_total[5m]))</dd></dl>
   <p class="foot">Discrete-GPU tiers, schematic; the Spark shares CPU/GPU memory, so its experiment uses disk without CPU retention. vLLM v0.31.0: CPU offload size is GiB summed across GPUs. Router-visible native offload needs "self_describing_kv_events" and KV event publishing, both off by default. Bandwidths: vendor specs, PCIe 5 x16, Gen4–Gen5 NVMe.</p>
   <aside class="notes">
     <p>On a discrete GPU, we can offload prefixes to CPU memory. LMCache also supports flash and remote storage. The Spark shares its CPU and GPU memory, so our experiment skips CPU retention and <strong>uses disk</strong>.</p>
@@ -433,7 +455,7 @@ MBU = (1000 ÷ <b>Mean TPOT</b> in milliseconds) ÷ (memory bytes/s ÷ estimated
     <div class="wb"><span class="tag">one-user ceiling · B200, 8 TB/s · one box = one token's weights</span><div class="belt"><i class="boxes"></i><i class="gpu">GPU</i></div><b class="huge green" data-vals="144,259,365" data-suf=" tok/s" data-ms="1400">144 tok/s</b></div>
   </div>
   <p class="say" data-step="3">NVFP4 runs W4A4 (4-bit weights, 4-bit activations: the values passed between layers) only on Blackwell (B200). On Hopper, vLLM falls back to W4A16: <span class="steel">4-bit weights, 16-bit activations</span>.</p>
-  <dl class="kit" data-step="3"><dt>try</dt><dd>Blackwell: vllm serve <b>nvidia/Qwen3.8-27B-NVFP4</b> · Hopper: <b>--quantization fp8_per_tensor</b></dd><dt>check</dt><dd>log "Model loading took X GiB"; a Marlin warning means no 4-bit math</dd></dl>
+  <dl class="kit" data-step="3"><dt>Blackwell</dt><dd>vllm serve <b>nvidia/Qwen3.8-27B-NVFP4</b></dd><dt>Hopper</dt><dd>vllm serve Qwen/Qwen3.8-27B <b>--quantization fp8_per_tensor</b></dd><dt>check</dt><dd>log "Model loading took X GiB"; a Marlin warning means no 4-bit math</dd></dl>
   <p class="foot">Belt schematic. Sizes: Qwen/Qwen3.8-27B, -FP8, nvidia/Qwen3.8-27B-NVFP4 (NVFP4 feed-forward blocks and lm_head; FP8 attention and DeltaNet). NVFP4: 4-bit values, an 8-bit scale per 16 weights, an FP32 scale per tensor. B200 8 TB/s: NVIDIA spec. vLLM v0.31.0: plain <span class="nw">--quantization fp8</span> no longer quantizes a bf16 checkpoint at load.</p>
   <aside class="notes">
     <p>Now let's shrink the weights. Our bf16 checkpoint is fifty-six gigabytes; the B200 ceiling is a hundred forty-four tokens a second.</p>
@@ -479,7 +501,9 @@ MBU = (1000 ÷ <b>Mean TPOT</b> in milliseconds) ÷ (memory bytes/s ÷ estimated
     <div class="qrow" data-step="4"><div class="ql"><b>MATH-500 · math</b><span>Gemma-4-31B, thinking off · 89.40 → 85.07 · 500 problems</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:40.5"></i></div><em class="steel">−4.33 points</em></div>
     <p class="say" data-step="5">Different quantized layers. <span class="green">Gate on your workload</span>, not on one exam.</p>
   </div>
-  <dl class="kit" data-step="5"><dt>try</dt><dd>lm-eval run --model local-chat-completions --apply_chat_template … <b>--tasks mmlu_pro</b></dd><dt>check</dt><dd>own tasks too; repeat both; match cache state; quality-loss budget: guide §5</dd></dl>
+  <dl class="kit complete-command" data-step="5"><dt>try</dt><dd>lm-eval run --model local-chat-completions --apply_chat_template \
+  --model_args model=Qwen/Qwen3.8-27B,base_url=http://localhost:8000/v1/chat/completions \
+  <b>--tasks mmlu_pro</b> --num_fewshot 0 --seed 1234 --log_samples --output_path results/baseline</dd><dt>check</dt><dd>repeat both; pair cases/seeds; keep quality loss within your predeclared budget (slide 35)</dd></dl>
   <p class="foot">RedHatAI model cards, evaluated on vLLM: Qwen3.8-Flash-Next-NVFP4 (1 seed, expert linears W4A4); gemma-4-31B-it-NVFP4 (3-seed means, block linears W4A4, lm-eval 0.4.11, zero-shot). No paired uncertainty interval is available here.</p>
   <aside class="notes">
     <p>Now let's check the answers. These dots show <strong>published score changes</strong> from bf16 to NVFP4. Left of zero means lower; this doesn't establish unchanged quality.</p>
@@ -500,7 +524,7 @@ MBU = (1000 ÷ <b>Mean TPOT</b> in milliseconds) ÷ (memory bytes/s ÷ estimated
     <div class="fitcount2"><span class="tag">128k conversations · ideal payload estimate</span><b class="huge" data-vals="0,1" data-map="2,4" style="--d:.6s">2</b></div>
     <div class="ladder" data-step="1"><span class="on">FP8 · roughly half the payload</span></div>
   </div>
-  <dl class="kit" data-step="1"><dt>try</dt><dd>vllm serve … <b>--kv-cache-dtype fp8</b></dd><dt>check</dt><dd>startup log "GPU KV cache size: N tokens", before and after</dd></dl>
+  <dl class="kit" data-step="1"><dt>try</dt><dd>vllm serve Qwen/Qwen3.8-27B <b>--kv-cache-dtype fp8</b></dd><dt>check</dt><dd>startup log "GPU KV cache size: N tokens", before and after</dd></dl>
   <p class="foot">Qwen3.8-27B at 128k, 17.5 GiB budget (slide 11): 8.1 GiB per conversation in bf16, 4.1 GiB in FP8, each with its unchanged 147 MiB state. Estimates, not measured admission limits.</p>
   <aside class="notes">
     <p>Let's go back to the conversations that didn't fit. We estimated room for two at a hundred twenty-eight k. This time we'll shrink the cache instead of the weights.</p>
@@ -609,7 +633,7 @@ MBU = (1000 ÷ <b>Mean TPOT</b> in milliseconds) ÷ (memory bytes/s ÷ estimated
     <div class="hb hot2" data-step="1"><b>turboquant_k8v4</b><div class="b"><i style="--w:78"></i></div><em>75–80%</em></div>
   </div>
   <p class="say" data-step="2">Start with FP8. Reach for k8v4 only when FP8's room isn't enough, and <b>time it on your GPU</b> first.</p>
-  <dl class="kit"><dt>try</dt><dd>vllm serve … <b>--kv-cache-dtype turboquant_k8v4</b></dd><dt>check</dt><dd>startup log "GPU KV cache size: N tokens", Mean TPOT and P95 TTFT, all vs fp8</dd></dl>
+  <dl class="kit"><dt>try</dt><dd>vllm serve Qwen/Qwen3.8-27B <b>--kv-cache-dtype turboquant_k8v4</b></dd><dt>check</dt><dd>startup log "GPU KV cache size: N tokens", Mean TPOT and P95 TTFT, all vs fp8</dd></dl>
   <p class="foot">vLLM blog, 11 May 2026, v0.20.2, offline, 200 prompts: k8v4 throughput 80% of bf16 (Qwen3-30B-A3B, 2×H100) and 75% (Llama-3.3-70B, 4×H100); 2.4× measured capacity; "no significant advantage over FP8". FP8 2.0×: 16 ÷ 8 bits per KV value.</p>
   <aside class="notes">
     <p>vLLM offers a different split: TurboQuant k8v4, eight-bit keys and four-bit values. These tests held two point four times the bf16 cache payload, versus two times for FP8.</p>
@@ -670,7 +694,9 @@ MBU = (1000 ÷ <b>Mean TPOT</b> in milliseconds) ÷ (memory bytes/s ÷ estimated
     <div class="arow" data-step="1"><span class="who">instructions</span><span class="tk ok">the</span><span class="tk ok">answer</span><span class="tk no">depends</span><span class="tk dim">on</span><span class="tk dim">what</span><div class="am"><i style="--w:48"></i></div><b class="ax">1.16×</b></div>
     <div class="arow" data-step="2"><span class="who">summaries</span><span class="tk ok">the</span><span class="tk ok">quarterly</span><span class="tk ok">revenue</span><span class="tk ok">rose</span><span class="tk no">by</span><div class="am"><i style="--w:100"></i></div><b class="ax">2.42×</b></div>
   </div>
-  <dl class="kit" data-step="3"><dt>MTP only</dt><dd>-sc '{"method":"mtp","num_speculative_tokens":1}'   (try 1 before 4)</dd><dt>n-gram</dt><dd>-sc '{"method":"ngram","num_speculative_tokens":3,"prompt_lookup_min":2,"prompt_lookup_max":4}'</dd><dt>check</dt><dd>log "SpecDecoding metrics: Mean acceptance length" and Mean TPOT</dd></dl>
+  <dl class="kit complete-command" data-step="3"><dt>MTP · start at 1</dt><dd>vllm serve Qwen/Qwen3.8-27B \
+  -sc '{"method":"mtp","num_speculative_tokens":1}'</dd><dt>n-gram</dt><dd>vllm serve Qwen/Qwen3.8-27B \
+  -sc '{"method":"ngram","num_speculative_tokens":3,"prompt_lookup_min":2,"prompt_lookup_max":4}'</dd><dt>check</dt><dd>log "SpecDecoding metrics: Mean acceptance length" and Mean TPOT</dd></dl>
   <p class="foot">Token rows illustrative. n-gram (prompt lookup, Vicuna-13B): Alpaca 1.16×, CNN/DailyMail 2.42× (arXiv:2503.01840, Table 1). <span class="nw">RedHatAI/Qwen3.8-27B-speculator.dspark</span>, vLLM 0.29.0, acceptance length including the target token: tool calls 3.76, writing 3.77, math 5.74.</p>
   <aside class="notes">
     <p>For agents, try compatible prediction layers, called draft heads: EAGLE-3, DSpark or multi-token prediction. This Qwen DSpark result is almost four tokens per pass on tool calls; we still need to time it.</p>
@@ -837,7 +863,7 @@ MBU = (1000 ÷ <b>Mean TPOT</b> in milliseconds) ÷ (memory bytes/s ÷ estimated
       <p class="dcap"><b>Scale on active requests and queues</b>, not GPU utilization. <b>Alert on</b> KV usage, queue depth, P95 TTFT and per-request TPOT.</p>
     </div>
   </div>
-  <p class="foot">500 ms is an illustrative latency target. Set targets from your SLO. Hit rate counts tokens; there is no universal target. Busy vs overloaded schematic; the llm-d queue metric needs flow control. PromQL and setup: field guide §§6–7.</p>
+  <p class="foot">500 ms is an illustrative latency target. Set targets from your SLO. Hit rate counts tokens; there is no universal target. Scrape /metrics: vllm:kv_cache_usage_perc and vllm:num_requests_waiting. Busy vs overloaded schematic; llm-d router queues need flow control.</p>
   <aside class="notes">
     <p>How do we know this helps users? Start with your <strong>service-level objective</strong>, or SLO. Here, half a second at P95 is just an example for first-token latency. Track per-request P95 TPOT and prefix token hits. Recheck one-user MBU and cost after changes.</p>
     <p>[click] Scale on active requests and queues. In llm-d, the router queue needs flow control: it holds excess requests before dispatch. <strong>GPU utilization alone</strong> can't tell us whether a busy server is keeping up.</p>
