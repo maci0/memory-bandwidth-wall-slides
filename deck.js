@@ -50,6 +50,7 @@ const planSeconds = slides.map((s) => {
 const planStart = planSeconds.map((_, i) => planSeconds.slice(0, i).reduce((a, b) => a + b, 0));
 const liveSeconds = slides.map(s => Number(s.dataset.seconds) || 0);
 const liveStart = liveSeconds.map((_, i) => liveSeconds.slice(0, i).reduce((a, b) => a + b, 0));
+const liveTotal = liveSeconds.reduce((a, b) => a + b, 0);
 
 slides.forEach((s, i) => {
   const n = document.createElement("span");
@@ -81,14 +82,17 @@ function setVals(slide, k, instant, back) {
     const step = Math.min(Math.max(k, 0), vals.length - 1), target = vals[step];
     const map = el.dataset.map?.split(",");
     const from = Number(el.dataset.now ?? vals[0]);
-    el.dataset.now = String(target);
     cancelAnimationFrame(Number(el.dataset.raf ?? 0));
     const text = (v) => (map ? map[v] : fmt(el, v, step));
-    if (instant || from === target) { el.textContent = text(target); continue; }
+    if (instant || from === target) { el.dataset.now = String(target); el.textContent = text(target); continue; }
     const t0 = performance.now() + (back ? 0 : buildDelay(el)), ms = map ? 0 : Number(el.dataset.ms ?? TWEEN_MS);
     const tick = (t) => {
       const p = ms ? Math.min(1, Math.max(0, (t - t0) / ms)) : Number(t >= t0);
-      if (p > 0) el.textContent = map ? text(target) : text(from + (target - from) * easeOut(p));
+      if (p > 0) {
+        const value = map ? target : from + (target - from) * easeOut(p);
+        el.dataset.now = String(value);
+        el.textContent = text(value);
+      }
       if (p < 1) el.dataset.raf = String(requestAnimationFrame(tick));
     };
     el.dataset.raf = String(requestAnimationFrame(tick));
@@ -456,11 +460,12 @@ const PLAY = {
     return () => { cancelAnimationFrame(raf); slide.onStep = null; };
   },
 
-  // What fits in HBM: conversations = 17.5 GiB ÷ (64 KiB × context + 147 MiB state), the footnote's
+  // Spark payload estimate: shared system bytes × .70 − checkpoint bytes − 4 GiB assumed runtime.
+  // Conversations = that budget ÷ (64 KiB × context + 147 MiB state), the footnote's
   // formula. Click 1 pops one cell per conversation as the count climbs; click 2 stretches the
   // context to 128k, each block grows with it, and the count is computed from the context every frame.
   fit(slide, still) {
-    const BUDGET_MIB = 17.5 * 1024, KIB_PER_TOKEN = 64, STATE_MIB = 147, POP_MS = 33;
+    const BUDGET_MIB = (130661208064 * .70 - 55563006776) / 2 ** 20 - 4 * 1024, KIB_PER_TOKEN = 64, STATE_MIB = 147, POP_MS = 33;
     const count = slide.querySelector(".fitcount .huge"), ctxEl = slide.querySelector(".ctxlbl");
     const short = slide.querySelector(".kvfill.short"), long = slide.querySelector(".kvfill.long");
     const ctxs = ctxEl.dataset.ctx.split(",").map(Number); // context per step, in k (1,024) tokens
@@ -489,7 +494,7 @@ const PLAY = {
         run((p) => show(ctxs[1], p > 0 ? Math.min(conv, Math.floor(p * conv) + 1) : 0), conv * POP_MS, buildDelay(short));
       } else if (k === 2 && was === 1) { // 8k → 128k on the bar curve, as the blocks grow
         run((p) => { const c = ctxs[1] + (ctxs[2] - ctxs[1]) * easeOut(p); show(c, fits(c)); }, TWEEN_MS, buildDelay(long));
-      } else settle();
+      } else if (k > 0) settle();
     };
     return () => { cancelAnimationFrame(raf); slide.onStep = null; };
   },
@@ -678,6 +683,20 @@ function sendState(target) {
   target?.postMessage({ i: cur, k: at, theme: document.documentElement.dataset.theme, blank: document.body.classList.contains("blank") }, messageTarget);
 }
 
+function motionPaused() { return document.hidden || document.body.classList.contains("blank"); }
+function syncMotion() {
+  const paused = motionPaused();
+  if (document.body.classList.contains("motion-paused") === paused) return;
+  document.body.classList.toggle("motion-paused", paused);
+  if (mode !== "show") return;
+  if (stop) stop();
+  stop = null;
+  const s = slides[cur], play = s.dataset.play;
+  setVals(s, at, true); // resume from a settled build; restarting a diagram never advances its cue
+  if (!paused && play && PLAY[play]) stop = PLAY[play](s, still);
+}
+document.addEventListener("visibilitychange", syncMotion);
+
 function render(i, k, remote) {
   i = Math.max(0, Math.min(slides.length - 1, Number.isFinite(i) ? Math.trunc(i) : 0));
   k = Math.max(0, Math.min(maxStep[i], Number.isFinite(k) ? Math.trunc(k) : 0));
@@ -708,11 +727,11 @@ function render(i, k, remote) {
   }
   cur = i; at = k;
   // Apply the step before a loop starts, so its first frame reads the right step.
-  apply(s, k, changed || still);
+  apply(s, k, changed || still || motionPaused());
   // Entering mid-slide (a jump, or back from the next slide): finite CSS builds land at their end state;
   // looping animations (infinite iterations) keep running.
   if (changed && k > 0) for (const a of s.getAnimations({ subtree: true })) { if (Number.isFinite(a.effect?.getComputedTiming().endTime)) a.finish(); }
-  const play = s.dataset.play, runs = play && PLAY[play] && mode !== "presenter";
+  const play = s.dataset.play, runs = play && PLAY[play] && mode !== "presenter" && !motionPaused();
   if (changed) {
     if (runs) stop = PLAY[play](s, still);
   } else if (still && runs) {
@@ -739,6 +758,7 @@ addEventListener("message", (e) => {
   if (theme === "dark" || theme === "light") document.documentElement.dataset.theme = theme;
   if (typeof blank === "boolean") document.body.classList.toggle("blank", blank);
   render(i, k, true);
+  syncMotion();
 });
 
 const JUMP_MS = 2000; let jump = "", jumpTimer = 0;
@@ -765,6 +785,7 @@ if (mode === "show" || mode === "presenter") addEventListener("keydown", (e) => 
       const r = document.documentElement, dark = (r.dataset.theme ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
       r.dataset.theme = dark ? "light" : "dark";
     } else document.body.classList.toggle("blank");
+    syncMotion();
     if (mode === "presenter") presenterUpdate();
     if (peer && !peer.closed) sendState(peer);
   }
@@ -772,17 +793,52 @@ if (mode === "show" || mode === "presenter") addEventListener("keydown", (e) => 
     if (!peer || peer.closed) peer = window.open(location.pathname + "?presenter", "presenter");
     else peer.focus();
   }
-  else if (key === "t" && mode === "presenter") t0 = Date.now();
+  else if (key === "t" && mode === "presenter") document.getElementById("pv-reset").click();
   else if (key === "h" && mode === "presenter") document.getElementById("pv-follow-toggle").click();
   else return;
+  jump = ""; clearTimeout(jumpTimer);
   e.preventDefault();
 });
 if (mode === "show") deck.addEventListener("click", (e) => (e.clientX > innerWidth / 3 ? next() : prev()));
 
 // ── presenter ──
-let t0 = 0;
+let t0 = 0, timerPausedAt = 0;
 const guide = { slide: -1, step: -1, items: [], index: 0, elapsed: 0, last: 0, running: false, wpm: 130 };
 function mmss(s) { s = Math.max(0, Math.round(s)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
+function presenterClock(now = Date.now()) {
+  const elapsed = t0 ? Math.max(0, ((timerPausedAt || now) - t0) / 1000) : 0;
+  const start = liveStart[cur], budget = liveSeconds[cur], end = start + budget;
+  const liveCount = liveSeconds.filter(Boolean).length;
+  const expected = liveSeconds.findIndex((seconds, i) => seconds && elapsed < liveStart[i] + seconds);
+  const clock = document.getElementById("pv-time"), progress = document.getElementById("pv-progress");
+  clock.textContent = mmss(elapsed);
+  clock.className = t0 && !timerPausedAt && (elapsed >= 2100 || (budget && elapsed >= end)) ? "late" : "";
+  progress.style.strokeDashoffset = String(2100 - Math.min(elapsed, 2100));
+  progress.classList.toggle("near", elapsed >= liveTotal && elapsed < 2100);
+  progress.classList.toggle("over", elapsed >= 2100);
+  const slideWindow = document.getElementById("pv-slide-window");
+  slideWindow.style.visibility = budget ? "visible" : "hidden";
+  slideWindow.style.strokeDasharray = `${budget} ${2100 - budget}`;
+  slideWindow.style.strokeDashoffset = String(-start);
+  document.getElementById("pv-slide-range").textContent = budget
+    ? `Slide ${cur + 1}/${liveCount} · ${mmss(start)}–${mmss(end)}`
+    : `Reference ${cur + 1 - liveCount}/${slides.length - liveCount} · outside live plan`;
+  const cue = document.getElementById("pv-pace-state");
+  const state = !t0 ? "ready" : timerPausedAt ? "paused" : elapsed >= 2100 ? "over" : !budget ? "reference"
+    : elapsed < start ? "ahead" : elapsed >= end ? "behind" : "on-time";
+  cue.dataset.state = state;
+  cue.textContent = state === "ready" ? "Ready · start when you begin"
+    : state === "paused" ? "Timer paused"
+    : state === "over" ? elapsed - 2100 < 1 ? "Hard stop reached" : `${mmss(elapsed - 2100)} past the hard stop`
+    : state === "reference" ? "Reference slide · no time budget"
+    : state === "ahead" ? `${mmss(start - elapsed)} ahead of this slide's slot`
+    : state === "behind" ? elapsed - end < 1 ? cur === liveCount - 1 ? "Live target reached · wrap up" : "Slide slot ended · advance" : `${mmss(elapsed - end)} behind this slide's end`
+    : `On time · ${mmss(end - elapsed)} left here`;
+  document.getElementById("pv-plan").textContent = !t0 ? `${liveCount} live slides · ${slides.length - liveCount} references`
+    : expected >= 0 ? `${timerPausedAt ? "Plan at pause" : "Plan now"}: slide ${expected + 1} of ${liveCount}`
+    : elapsed < 2100 ? `${mmss(liveTotal)} target reached · ${mmss(2100 - elapsed)} to hard stop` : "35-minute speaking slot ended";
+  document.getElementById("pv-clock-toggle").textContent = !t0 ? "Start timer" : timerPausedAt ? "Resume timer" : "Pause timer";
+}
 function guideDuration(item) { return Number(item.dataset.pause) || Number(item.dataset.words) * 60 / guide.wpm; }
 function guidePaint(scroll = false) {
   const active = guide.items[guide.index];
@@ -818,11 +874,12 @@ function guideTick(now = performance.now()) {
   guidePaint(guide.index !== before);
 }
 function presenterUpdate() {
-  if (!t0) t0 = Date.now();
   for (const f of document.querySelectorAll("#presenter iframe")) sendState(f.contentWindow);
   const notes = document.getElementById("pv-notes");
   const newSlide = guide.slide !== cur;
   const newPassage = newSlide || guide.step !== at;
+  // Narrow layouts scroll the page; keep the controls visible until the first navigation.
+  const scrollPassage = guide.running || (guide.slide >= 0 && getComputedStyle(notes).overflowY === "visible");
   if (newSlide) {
     notes.innerHTML = slides[cur].querySelector(".notes")?.innerHTML ?? "";
     const segmenter = new Intl.Segmenter("en", { granularity: "sentence" });
@@ -902,8 +959,8 @@ function presenterUpdate() {
   document.getElementById("pv-prev").disabled = cur === 0 && at === 0;
   document.getElementById("pv-next").disabled = cur === slides.length - 1 && at === maxStep[cur];
   document.getElementById("pv-pos").textContent = `slide ${cur + 1}/${slides.length} · step ${at}/${maxStep[cur]}` + (clicks !== maxStep[cur] ? " · notes clicks " + clicks : "");
-  document.getElementById("pv-plan").textContent = "Script estimate at this slide ≈ " + mmss(planStart[cur]);
-  if (newPassage) guideSeek(0, guide.running);
+  presenterClock();
+  if (newPassage) guideSeek(0, scrollPassage);
 }
 if (mode === "presenter") {
   peer = window.opener;
@@ -926,7 +983,21 @@ if (mode === "presenter") {
   };
   document.getElementById("pv-prev").onclick = prev;
   document.getElementById("pv-next").onclick = next;
-  document.getElementById("pv-reset").onclick = () => { t0 = Date.now(); };
+  document.getElementById("pv-clock-toggle").onclick = () => {
+    const now = Date.now();
+    if (!t0) t0 = now;
+    else if (timerPausedAt) { t0 += now - timerPausedAt; timerPausedAt = 0; }
+    else timerPausedAt = now;
+    presenterClock(now);
+  };
+  document.getElementById("pv-reset").onclick = () => { t0 = timerPausedAt = 0; presenterClock(); };
+  const checkpoints = document.getElementById("pv-checkpoints");
+  for (const [i, label] of [[14, "Four levers"], [25, "Speculative decoding"], [29, "Fleet"], [35, "Eval recipe"], [37, "Finish"]]) {
+    const row = document.createElement("div"), name = document.createElement("dt"), time = document.createElement("dd");
+    name.textContent = `${i + 1} · ${label}`;
+    time.textContent = mmss(liveStart[i] + (i === 37 ? liveSeconds[i] : 0));
+    row.append(name, time); checkpoints.append(row);
+  }
   document.getElementById("pv-follow-toggle").onclick = () => {
     guideTick();
     guide.running = !guide.running; guide.last = performance.now();
@@ -958,13 +1029,7 @@ if (mode === "presenter") {
       peer = null; open.textContent = "Open presentation";
       status.textContent = "Presentation closed. Open it again to reconnect.";
     }
-    const el = (t0 - Date.now()) / -1000;
-    document.getElementById("pv-time").textContent = mmss(el);
-    document.getElementById("pv-time").className = el >= 2100 || (liveSeconds[cur] && el > liveStart[cur] + liveSeconds[cur]) ? "late" : "";
-    const gauge = document.getElementById("pv-progress");
-    gauge.style.strokeDashoffset = String(2100 - Math.min(el, 2100));
-    gauge.classList.toggle("near", el >= 1980 && el < 2100);
-    gauge.classList.toggle("over", el >= 2100);
+    presenterClock();
   }, 500);
   document.querySelectorAll("#presenter iframe").forEach((f) => {
     f.tabIndex = -1;
@@ -985,6 +1050,7 @@ if (mode === "show") addEventListener("hashchange", () => {
   if (hi >= 1 && (hi - 1 !== cur || (hk || 0) !== at)) render(hi - 1, hk || 0);
 });
 fit();
+syncMotion();
 
 // ── start ──
 if (mode === "print") {

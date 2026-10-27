@@ -17,11 +17,11 @@
   <h1>The Memory-<br>Bandwidth Wall</h1>
   <p class="lede">A field guide to min-maxing LLM serving with vLLM</p>
   <p class="hookline">Your dashboard says busy. Your users say slow.</p>
-  <p class="eq" data-step="1">tok/s × bytes = <span class="steel">bandwidth</span></p>
+  <p class="eq" data-step="1"><span class="steel">bandwidth</span> ÷ bytes per token = tok/s</p>
   <p class="byline"><b>Marcel Wysocki</b> · Senior Principal Architect · Red Hat Global Services<br><span class="own">Speaking for myself, not for Red Hat.</span></p>
   <aside class="notes">
     <p>[pause 2s: look up and smile] Your GPU dashboard says <strong>busy</strong>, and your users say slow. Your GPU isn't slow. <strong>It's starving.</strong> [beat] Good afternoon. I'm Marcel, speaking for myself. Today we'll estimate the decode speed limit, then apply the tuning levers to one vLLM deployment. You'll leave with that experiment and an eval recipe to check whether your changes are good enough to ship.</p>
-    <p>[click] We'll keep coming back to this: tokens per second, times <strong>bytes per token</strong>, equals bandwidth. Skip repeated work, min the bytes, max the tokens per read.</p>
+    <p>[click] We'll keep coming back to this: bandwidth divided by <strong>bytes per token</strong> gives tokens per second. Skip repeated work, min the bytes, max the tokens per read.</p>
   </aside>
 </section>
 
@@ -37,7 +37,7 @@
       <div class="st warn dc"><span class="dot"></span><h3>Decode</h3><p>One token per step. Rereads weights and KV.</p><span class="lchips life-demo decode-demo" data-step="3"><i class="w">weights</i><i class="k">K</i><i class="v">V</i><i class="next-token">token</i></span></div>
       <div class="st stream"><span class="dot"></span><h3>Stream</h3><p>Tokens back to the user.</p><div class="life-demo stream-demo" data-step="4" role="img" aria-label="Output streams to the user one token at a time"><i>Here</i><i> you</i><i> go.</i></div></div>
     </div>
-    <p class="say" data-step="4">Today's session focuses on the <b>three middle stages</b>.</p>
+    <p class="say" data-step="4">This talk is about the <b>three middle stages</b>.</p>
   </div>
   <aside class="notes">
     <p>First, let's follow a request through the server. The tokenizer splits your prompt into pieces called tokens and gives each an ID. The model turns those IDs into lists of numbers it can calculate with.</p>
@@ -74,7 +74,7 @@
   </div>
   <p class="foot">Schematic. Qwen3.8-27B bf16 checkpoint: 55.6 GB; a decode step reads about 51 GB of it.</p>
   <aside class="notes">
-    <p>Let's zoom in on decode. The model produces a token, adds it to the context, and <strong>goes around again</strong>. [pause 3s: follow one decode loop]</p>
+    <p>Decode is a loop. The model produces a token, adds it to the context, and <strong>goes around again</strong>. [pause 3s: follow one decode loop]</p>
     <p>[click] We'll use Qwen3.8 27B in bf16: sixteen bits per weight. Its saved weights, the checkpoint, occupy about fifty-six gigabytes. Text decode reads about <strong>fifty-one</strong>; the file also contains components this step doesn't read.</p>
     <p>[click] Each lap also adds a row to the KV cache and reads the cache. The weights stay the same size, but the conversation <strong>keeps growing</strong>.</p>
   </aside>
@@ -99,7 +99,7 @@
   <p class="foot">Schematic.</p>
   <aside class="notes">
     <p>Those two phases make different demands on the same chip. A long prefill has lots of tokens to work on together, keeping the matrix units busy. We usually hit the <strong>compute limit</strong>.</p>
-    <p>[click] A single conversation has to wait: token ten needs token nine. Decode does a little math, then <strong>waits for bytes</strong> from memory. That's our starting point. <strong>A large batch</strong>, with many conversations processed together, can push decode toward compute; a short prefill can hit the memory limit.</p>
+    <p>[click] A single conversation has to wait: token ten needs token nine. Decode does a little math, then <strong>waits for bytes</strong> from memory. That's our starting point. <strong>A large batch</strong>, with many conversations processed together, can make decode compute-bound; a short prefill can be limited by memory bandwidth.</p>
   </aside>
 </section>
 
@@ -108,12 +108,12 @@
   <h2>Your GPU isn't slow. It's starving.</h2>
   <div class="stage bus">
     <div class="die"><span class="tag">GPU · compute</span><div class="cores idle" data-repeat="36"><i></i></div><span class="tokout" data-step="2" aria-hidden="true"><i></i></span></div>
-    <div class="wirebox"><svg class="gauge" data-step="2" viewBox="-30 0 180 66" aria-hidden="true"><path class="g-track" d="M10 60A50 50 0 0 1 110 60"/><path class="g-spec" d="M103.3 35A50 50 0 0 1 110 60"/><text class="g-speclbl" x="110" y="15" text-anchor="middle">rated max</text><line class="g-needle" x1="60" y1="60" x2="60" y2="18"/><circle class="g-hub" cx="60" cy="60" r="4"/></svg><span class="wl" data-step="1">the pipe: a fixed speed per GPU</span><div class="wire" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div><span class="wl" data-step="1">each token needs <b class="steel">the weights</b> to cross it</span></div>
+    <div class="wirebox"><svg class="gauge" data-step="2" viewBox="-30 0 180 66" aria-hidden="true"><path class="g-track" d="M10 60A50 50 0 0 1 110 60"/><path class="g-spec" d="M103.3 35A50 50 0 0 1 110 60"/><text class="g-speclbl" x="110" y="-6" text-anchor="middle">rated max</text><line class="g-needle" x1="60" y1="60" x2="60" y2="18"/><circle class="g-hub" cx="60" cy="60" r="4"/></svg><span class="wl" data-step="1">the pipe: a fixed speed per GPU</span><div class="wire" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div><span class="wl" data-step="1">each token needs <b class="steel">the weights</b> to cross it</span></div>
     <div class="mem"><span class="tag">HBM, high-bandwidth memory · weights</span><div class="hbm3d" aria-hidden="true"><div class="stk"><i style="--i:0"></i><i style="--i:1"></i><i style="--i:2"></i><i style="--i:3"></i><i style="--i:4"></i><i style="--i:5"></i><i style="--i:6"></i><i style="--i:7"></i></div></div><span class="mkey dielbl"><i class="ky w"></i>weights <i class="ky rt"></i>runtime <i class="ky kv"></i>KV cache</span></div>
   </div>
   <p class="plain center" data-step="2">Tokens per second is pipe speed divided by bytes per token.</p>
-  <p class="formula-s busf" data-step="2">tok/s × bytes = <span class="steel">bandwidth</span></p>
-  <p class="rcpt" data-step="2">In vLLM: <b class="green">measure the token gap</b>, then compare it with the byte budget.</p>
+  <p class="formula-s busf" data-step="2"><span class="steel">bandwidth</span> ÷ bytes per token = tok/s</p>
+  <p class="rcpt" data-step="2">In vLLM: <b class="green">measure decode tokens per second</b>, then compare it with the ceiling.</p>
   <p class="foot">Schematic: one dense-model stream, short context, speculation off. The checkpoint is a first estimate of weight bytes read.</p>
   <aside class="notes">
     <p>Here's what that waiting looks like. The compute is ready, but it needs the weights.</p>
@@ -142,7 +142,7 @@
   <aside class="notes">
     <p>Let's try that division. One H100 SXM gives us three point three five terabytes a second. Our bf16 checkpoint is about fifty-six gigabytes. How many tokens a second for <strong>one user</strong>? Shout a number, or just think one. [hold]</p>
     <p>[click] About <strong>sixty tokens a second</strong>. On a B200, a hundred forty-four. We're using checkpoint size as a quick approximation; the actual decode read is a little different.</p>
-    <p>[click] Batching lets several users share a weight read, raising total throughput. That's <strong>across all users</strong>. But mixtures of experts can read more bytes as the batch grows. Let's see why.</p>
+    <p>[click] Batching lets several users share a weight read, raising throughput <strong>across all users</strong>. But mixtures of experts can read more bytes as the batch grows.</p>
   </aside>
 </section>
 
@@ -192,18 +192,18 @@
 
 <section class="slide" data-move="2" data-seconds="55" data-coach="Compare low and high MBU. There is no universal percentage at which tuning must stop.">
   <p class="kicker">Movement 2 · the diagnostic</p>
-  <h2>MBU tells you whether tuning can help.</h2>
+  <h2>MBU tells you whether overhead tuning can help.</h2>
   <div class="stage mbu">
     <div class="mpipe" role="img" aria-label="MBU as how full the memory pipe is">
       <span class="tag">the memory pipe · schematic</span>
       <div class="tube"><i class="flow lo"></i><i class="flow hi"></i></div>
       <span class="mlbl lo" data-step="1" data-until="2">weight reads with idle gaps between them</span>
-      <span class="mlbl hi swap-in" data-step="2">reads mostly back to back<br><b class="green">check the profile</b></span>
+      <span class="mlbl hi swap-in" data-step="2">reads mostly back to back</span>
     </div>
     <div class="mbu-side">
       <p class="plain">MBU: <b>how full the pipe is.</b></p><p class="mono formula-s">one-user tok/s ÷ one-user ceiling</p>
       <div class="verdict cool" data-step="1" data-until="2"><b>Low MBU</b><span>Kernels, launch overhead, batch shape. Tuning can help. A profile shows where.</span></div>
-      <div class="verdict hot swap-in" data-step="2"><b>High MBU</b><span>The bus is likely the limit. Confirm in a profile before you stop tuning overhead. Fewer bytes still raise tok/s.</span></div>
+      <div class="verdict hot swap-in" data-step="2"><b>High MBU</b><span>The pipe is likely the limit. Confirm in a profile before you stop tuning overhead. Fewer bytes still raise tok/s.</span></div>
     </div>
   </div>
   <dl class="kit complete-command" data-step="1"><dt>try</dt><dd>VLLM_WORKER_MULTIPROC_METHOD=spawn nsys profile \
@@ -214,7 +214,7 @@
 nsys stats report1.nsys-rep</dd></dl>
   <p class="foot">Model bandwidth utilization (MBU), Databricks 2023. Short-context, one-user estimate; not a hardware-counter reading. No universal stop-tuning percentage.</p>
   <aside class="notes">
-    <p>We've estimated a ceiling. Now let's compare it with what the server actually does. <strong>At short context</strong>, divide one-user tokens per second by that ceiling. That's model bandwidth utilization, or MBU.</p>
+    <p>We've estimated a ceiling. Now compare it with what the server actually does. <strong>At short context</strong>, divide one-user tokens per second by that ceiling. That's model bandwidth utilization, or MBU.</p>
     <p>[click] <strong>If it's low</strong>, look for overhead: GPU operations, their launch costs and batch shape. Profile a test server with Nsight Systems or PyTorch; never enable profiling in production.</p>
     <p>[click] <strong>If it's high</strong>, the bus may already be the limit. There's no universal percentage where tuning stops. Check the profile: are there gaps to remove, or are weight reads back to back? That tells us whether to tackle overhead or reduce bytes.</p>
   </aside>
@@ -224,27 +224,18 @@ nsys stats report1.nsys-rep</dd></dl>
   <p class="kicker">Movement 2 · field kit: measure MBU</p>
   <h2>Measure your MBU in five minutes.</h2>
   <div class="stage fieldkit self-contained">
-    <pre class="code bytes" data-step="0"># 1 · Cached, pinned bf16 model; no weight download
-python3 - &lt;&lt;&#x27;PYCODE&#x27;
-import json
-from pathlib import Path
-from huggingface_hub import snapshot_download
-root = Path(snapshot_download(&quot;Qwen/Qwen3.8-27B&quot;,
-    revision=&quot;1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0&quot;,
-    local_files_only=True))
-weights = 0
-for file in root.glob(&quot;*.safetensors&quot;):
-    with file.open(&quot;rb&quot;) as f:
-        size = int.from_bytes(f.read(8), &quot;little&quot;)
-        header = json.loads(f.read(size))
-    for name, t in header.items():
-        if name == &quot;__metadata__&quot; or name.startswith(
-                (&quot;model.visual.&quot;, &quot;mtp.&quot;)): continue
-        lo, hi = t[&quot;data_offsets&quot;]
-        weights += (t[&quot;shape&quot;][1] * 2 if name.endswith(
-            &quot;embed_tokens.weight&quot;) else hi - lo)
-print(f&quot;{weights / 1e9:.2f} GB; {273e9 / weights:.2f} tok/s&quot;)
-PYCODE</pre>
+    <pre class="code bytes" data-step="0"># 1 · Fetch the index, not the weights
+MODEL=Qwen/Qwen3.8-27B
+REV=1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+curl -fsSL "https://huggingface.co/$MODEL/resolve/"\
+"$REV/model.safetensors.index.json" |
+  jq '.metadata.total_size / 1e9'
+
+# 55.56 GB: the whole checkpoint
+# Text decode reads about 51.25 GB.
+# Vision, MTP and most input embeddings
+# aren't read at each text-decode step.
+# Text-decode byte estimate: handout §1</pre>
     <pre class="code bench" data-step="1"># 2 · Warm server: qwen38 on port 18082
 vllm bench serve --backend vllm --model qwen38 \
   --tokenizer Qwen/Qwen3.8-27B --port 18082 \
@@ -257,42 +248,41 @@ ceiling = 273 GB/s ÷ 51.25 GB = 5.33 tok/s
 measured = 1000 ÷ 222.5 ms = 4.49 tok/s
 MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </div>
-  <p class="say" data-step="2">Spark · untuned baseline: <b>222.5 ms</b> TPOT ≈ <b>4.49 tok/s</b> ÷ 5.33 ≈ <b>84% MBU</b>.</p>
-  <p class="foot">DGX Spark · Qwen3.8-27B bf16 · vLLM 0.32.0 · 25 Oct 2026. Median: 3 × 16 saved coding prompts, 128 output tokens. Eager, prefix/chunking off. Weight estimate omits vision, MTP, full input embeddings and KV/state traffic. 273 GB/s: NVIDIA. Warm-server diagnostic above; exact runs: handout.</p>
+  <p class="say" data-step="2">Spark · untuned baseline: <b>222.5 ms</b> TPOT (time per output token) ≈ <b>4.49 tok/s</b> ÷ 5.33 ≈ <b>84% MBU</b>.</p>
+  <p class="foot">DGX Spark · Qwen3.8-27B bf16 · vLLM 0.32.0 · 25 Oct 2026. Median: 3 × 16 saved coding prompts, 128 output tokens. Eager, prefix/chunking off. Weight estimate omits vision, MTP (multi-token prediction) layers, full input embeddings and KV/state traffic. 273 GB/s: NVIDIA. Warm-server diagnostic above; repeatable test: handout §2.</p>
   <aside class="notes">
-    <p>Let's use my DGX Spark as a running example, with Qwen three point eight 27B on vLLM. Text decode reads about fifty-one gigabytes of weights per step. Divide the Spark's bandwidth by that: about five point three tokens a second. [pause 3s: point to the division]</p>
-    <p>[click] I started with <strong>one request at a time</strong>, with compilation, CUDA graphs, chunking and prefix caching off. We'll add them back one by one. Three repeated runs gave about two hundred twenty-three milliseconds per output token. The command here is a quick diagnostic; the handout has the exact test.</p>
-    <p>[click] That gives four point five decode tokens a second, roughly <strong>eighty-four percent</strong> estimated MBU. [pause 3s: let the result land] Even this untuned setup is using much of the estimated bandwidth. We'll see what overhead tuning can recover, then <strong>change the bytes and tokens per read</strong>.</p>
+    <p>Let's use my DGX Spark as a running example, with Qwen three point eight 27B on vLLM. The curl command gets the whole checkpoint size. Text decode reads less: about fifty-one gigabytes per step. The handout accounts for the difference. Divide the Spark's bandwidth by that: about five point three tokens a second. [pause 3s: point to the division]</p>
+    <p>[click] I started with <strong>one request at a time</strong>, with compilation, CUDA graphs, chunking and prefix caching off. Three repeated runs gave about two hundred twenty-three milliseconds per output token, the TPOT. The command here is a quick diagnostic; the handout has a repeatable test.</p>
+    <p>[click] That gives four point five decode tokens a second, roughly <strong>eighty-four percent</strong> estimated MBU. [pause 3s: let the result land] Even this untuned setup is using much of the estimated bandwidth. We'll restore the defaults, then <strong>change the bytes and tokens per read</strong>.</p>
   </aside>
 </section>
 
-<section class="slide" data-move="3" data-play="fit" data-seconds="55" data-coach="Ask how many 128k conversations fit; wait five seconds, then reveal two. Emphasize ideal payload versus startup capacity.">
+<section class="slide" data-move="3" data-play="fit" data-seconds="55" data-coach="Use the DGX Spark as a worked example. Weights and runtime come first; the bar spans the chosen server budget. Ask how many 128k conversations fit, then reveal three. Distinguish ideal payload from startup capacity.">
   <p class="kicker">Movement 3 · what the GPU holds</p>
-  <h2>Three things fight for the same GPU memory.</h2>
+  <h2>Weights and runtime come first. The KV cache gets the rest.</h2>
   <div class="stage hbm">
     <div class="hbmbar">
       <div class="seg w"><span>weights<br><b>51.7 GiB</b><br><span class="eqv">= 55.6 GB</span></span></div>
       <div class="seg rt"><span>runtime</span></div>
       <div class="seg kvarea"><span class="violet" data-until="1">KV cache<br>gets the rest</span>
-        <div class="kvfill short" data-step="1" data-until="2" data-repeat="27"><i></i></div>
-        <div class="kvfill long swap-in" data-step="2" data-repeat="2"><i></i></div>
+        <div class="kvfill short" data-step="1" data-until="2" data-repeat="45"><i></i></div>
+        <div class="kvfill long swap-in" data-step="2" data-repeat="3"><i></i></div>
       </div>
-      <div class="seg rsv"><span>8% reserve</span></div>
     </div>
     <div class="hbm-legend">
-      <div><span class="tag">H100 SXM · 79.6 GiB · <span class="nc">Qwen3.8-27B</span> bf16 · KV 64 KiB per token + 147 MiB per conversation</span></div>
+      <div><span class="tag">DGX Spark example · server budget 85.2 GiB · <span class="nc">Qwen3.8-27B</span> bf16 · utilization 0.70</span></div>
     </div>
     <div class="fitcount" data-step="1">
-      <span class="tag">ideal payload capacity · conversations</span>
+      <span class="tag">conversations · ideal payload estimate</span>
       <span class="huge">0</span>
       <span class="ctxlbl" data-ctx="8,8,128">8k context</span>
     </div>
   </div>
-  <p class="foot">Computed, GiB: 79.6 (nvidia-smi) × 0.92 (vLLM default --gpu-memory-utilization) − 51.7 weights (the 55.6 GB checkpoint) − 4 assumed runtime = 17.5 for KV, ÷ (64 KiB × context + 147 MiB state) per conversation. Bar to scale. Measure vLLM's startup capacity.</p>
+  <p class="foot">Spark1 records: 121.6877 GiB system memory × chosen 0.70 − 51.7471 GiB checkpoint − 4 GiB assumed runtime ≈ 29.4 GiB. Divide by 64 KiB × context + 147 MiB state. Bar spans the selected 85.2 GiB server budget, to scale. Payload estimate; check startup capacity.</p>
   <aside class="notes">
-    <p>Bandwidth is only our first constraint. The conversations also have to fit in memory. Weights take a fixed amount, and the server needs temporary working space too. The <strong>KV cache gets what's left</strong>.</p>
-    <p>[click] Back to our twenty-seven-billion-parameter model on the H100. Its weights occupy about two thirds of the card. Ideal arithmetic leaves room for twenty-seven conversations at eight k tokens. Stretch them to a hundred twenty-eight k: how many fit now? [hold]</p>
-    <p>[click] <strong>Two.</strong> Same card, same model, longer context. Copies and padding cost extra, so check the server's <strong>startup capacity</strong> before promising how many requests it can hold.</p>
+    <p>On this DGX Spark, our seventy-percent setting gives the server about eighty-five gigabytes, in binary units. <strong>Weights and runtime come first</strong>. The <strong>KV cache gets what's left</strong>.</p>
+    <p>[click] For our twenty-seven-billion-parameter model, that leaves about twenty-nine for cache, assuming four for runtime. Ideal arithmetic fits <strong>forty-five conversations at eight k</strong> tokens. Stretch each to a hundred twenty-eight k: how many now? [hold]</p>
+    <p>[click] <strong>Three.</strong> Same machine and model, longer context. State copies and block padding cost more. Check the server's <strong>startup capacity</strong> before promising an admission count.</p>
   </aside>
 </section>
 
@@ -307,7 +297,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
       <div class="res" data-step="2">= <b class="violet" data-vals="0,0,64" data-suf=" KiB">64 KiB</b> per token: one slab</div>
       <p class="mono formula-s" data-step="2">2 × 16 × 4 × 256 × 2 B = 65,536 B = 64 KiB</p>
       <div class="res big2" data-step="3">× 131,072 tokens = <b class="violet" data-vals="0,0,0,8" data-suf=" GiB" data-ms="1800" style="--d:.3s">8 GiB</b> for <u>one</u> 128k conversation</div>
-      <p class="plain sm" data-step="3" style="--d:1.4s">+ the other 48 layers (Gated DeltaNet): one fixed 147 MiB state. Payload ≈ 8.1 GiB, before copies and padding.</p>
+      <p class="plain sm" data-step="3" style="--d:1.4s">+ the other 48 layers (Gated DeltaNet): one fixed 147 MiB state. Payload ≈ 8.1 GiB, before state copies and block padding.</p>
     </div>
     <div class="kv3d big" aria-hidden="true">
       <div class="kvscene">
@@ -323,7 +313,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
       </div>
     </div>
   </div>
-  <p class="foot">Qwen3.8-27B config.json: 64 layers, 16 full attention (4 KV heads, head_dim 256), 48 Gated DeltaNet with 146.8 MiB fixed state per sequence (fp32 recurrent, bf16 convolution) (vLLM v0.31.0 mamba_utils.py). Strips schematic.</p>
+  <p class="foot">Qwen3.8-27B config.json: 64 layers, 16 full attention (4 KV heads, head_dim 256), 48 Gated DeltaNet with 146.8 MiB fixed state per sequence (fp32 recurrent, bf16 convolution) (vLLM 0.31.0 mamba_utils.py). Strips schematic.</p>
   <aside class="notes">
     <p>Let's work out the cache for one conversation. Every token leaves a key and a value in each attention layer. [pause 3s: point to K and V]</p>
     <p>[click] This model has sixteen attention layers, each with four sets of keys and values, called KV heads. Each key and value holds two hundred fifty-six numbers; bf16 uses two bytes per number.</p>
@@ -332,7 +322,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </aside>
 </section>
 
-<section class="slide" data-move="3" data-seconds="50" data-coach="Advance one context at a time. Separate demanded memory from what fits on the H100.">
+<section class="slide" data-move="3" data-seconds="50" data-coach="Advance one context at a time. Separate demanded memory from the Spark's chosen cache budget.">
   <p class="kicker">Movement 3 · problem 2</p>
   <h2>At long context, the KV cache outgrows the weights.</h2>
   <div class="stage grow">
@@ -344,8 +334,8 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </div>
   <p class="foot">Computed: 16 users × (64 KiB × tokens + 147 MiB state) = 6.3 / 34.3 / 130.3 GiB at 4k / 32k / 128k; weights 51.7 GiB (the 55.6 GB checkpoint). Depth to scale; front face schematic.</p>
   <aside class="notes">
-    <p>Now imagine sixteen users, each keeping a longer conversation. We're plotting their memory demand; they won't all fit on our H100. At four k, their cache is about six gigabytes.</p>
-    <p>[click] At thirty-two k, it's thirty-four gigabytes, and we've already run out of room on that card.</p>
+    <p>Now imagine sixteen users, each keeping a longer conversation. We're plotting their memory demand; they won't all fit in the Spark's chosen cache budget. At four k, their cache is about six gigabytes.</p>
+    <p>[click] At thirty-two k, it's thirty-four gigabytes, and we've already exceeded that cache budget.</p>
     <p>[click] At a hundred twenty-eight k, it's a hundred thirty gigabytes, two and a half times the weights. Only a quarter of this model's layers grow with context. Even so, above about fifty k, these users <strong>read more KV than weights</strong> each step. That changes <strong>what you should optimize</strong>.</p>
   </aside>
 </section>
@@ -373,7 +363,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </div>
   <dl class="kit" data-step="1"><dt>try</dt><dd><b>--max-num-batched-tokens</b> 2048 · 8192 · 16384   (scheduling-step token budget)</dd><dt>check</dt><dd>P95 (95th percentile) vllm:inter_token_latency_seconds vs P95 TTFT (time to first token)</dd></dl>
   <p class="say" data-step="1"><span class="green">Chunked prefill</span>: slices of the prompt, interleaved with everyone's decode.</p>
-  <p class="foot">Stall timeline schematic. vLLM v0.31.0: chunked prefill on by default; --max-num-batched-tokens defaults to 8192 (H100/H200) and 16384 (B200).</p>
+  <p class="foot">Timeline schematic. vLLM 0.32.0 serving defaults: chunked prefill on where supported; --max-num-batched-tokens = 8192 on Spark (GB10), H100/H200; 16384 on B200.</p>
   <aside class="notes">
     <p>There's one more problem before we choose a fix. Your users are decoding happily, and someone sends a hundred-thousand-token prompt. If the GPU takes that whole prefill at once, <strong>everyone else's stream stalls</strong>. [pause 2s: let the stall show]</p>
     <p>[click] Chunked prefill slices it up, leaving room for decode between slices. It's on by default in vLLM. The <strong>token budget</strong> per scheduling step controls the tradeoff: how long the new request waits versus gaps in everyone else's stream. <strong>Watch both</strong> at P ninety-five, the cutoff before the slowest five percent. Helping one can hurt the other.</p>
@@ -409,17 +399,17 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
       <div class="turn" data-step="1"><span class="who">step 2</span><i class="c sys">system</i><i class="c tools">tools</i><i class="c hist">task</i><i class="c q">tool result</i></div>
       <div class="turn" data-step="1" style="--d:.15s"><span class="who">step 3</span><i class="c sys">system</i><i class="c tools">tools</i><i class="c hist">task</i><i class="c hist">tool result</i><i class="c q">diff</i></div>
       <div class="turn" data-step="1" style="--d:.3s"><span class="who">step 4</span><i class="c sys">system</i><i class="c tools">tools</i><i class="c hist">task</i><i class="c hist">tool result</i><i class="c hist">diff</i><i class="c q">test log</i></div>
-      <p class="rcount" data-step="1"><b data-vals="0,12,0">0</b> chips recomputed</p>
+      <p class="rcount" data-step="1"><b data-vals="0,12,0">0</b> repeated pieces recomputed</p>
     </div>
     <div class="pricebox"><span class="tag" data-vals="0,0,1" data-map="cache miss: recompute all,cache hit: reused prefix">cache miss: recompute all</span><span class="huge" data-vals="0.66,0.66,0.022" data-decs="2,2,3" data-pre="$">$0.66</span><span class="u" data-vals="0,0,1" data-map="per 1M input tokens,per 1M cached input tokens">per 1M input tokens</span></div>
   </div>
   <p class="say" data-step="2">Developers with the same harness and tools can <span class="green">share the prefix.</span></p>
   <dl class="kit" data-step="2"><dt>try</dt><dd>on by default · compare with <b>--no-enable-prefix-caching</b></dd><dt>check</dt><dd>sum(rate(vllm:prefix_cache_hits_total[5m])) / sum(rate(vllm:prefix_cache_queries_total[5m]))</dd></dl>
-  <p class="foot">Turns schematic. Price: DeepSeek V4-Pro, off-peak, checked 25 Oct 2026. Share prefixes within an approved group; use different secret "cache_salt" values across required isolation boundaries (vLLM v0.31.0).</p>
+  <p class="foot">Turns schematic. Price: DeepSeek V4-Pro, off-peak, checked 25 Oct 2026. Share prefixes within an approved group; use different secret "cache_salt" values across required isolation boundaries (vLLM 0.31.0).</p>
   <aside class="notes">
-    <p>Think about a coding agent. Its first request contains the system prompt, the tools and your task.</p>
-    <p>[click] Then a tool returns. The agent sends all of that again, plus the result. Next comes a diff, then a test log. Without caching, the server processes the same beginning over and over.</p>
-    <p>[click] Prefix caching reuses stored KV for the <strong>exact matching beginning</strong> and computes <strong>only the new tail</strong>. It's on by default. Developers sharing a harness, tools and system prompt can share that prefix. A cache salt is a secret value sent with each request to control reuse. <strong>Share one within the team</strong>; use separate salts for groups that need isolation.</p>
+    <p>A coding agent's first request contains the system prompt, the tools and your task.</p>
+    <p>[click] Then a tool returns. The agent resends everything, plus the result. Next comes a diff, then a test log. Without caching, it reprocesses the same beginning.</p>
+    <p>[click] Prefix caching reuses stored KV for the <strong>exact matching beginning</strong> and computes <strong>only the new tail</strong>. It's on by default. The price shown is thirty times lower for cached input. Developers sharing a harness, tools and system prompt can share that prefix. A cache salt is a secret value sent with each request to control reuse. <strong>Share one within the team</strong>; use separate salts for groups that need isolation.</p>
   </aside>
 </section>
 
@@ -439,26 +429,26 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
     </div>
   </div>
   <p class="say" data-step="1">More <span class="green">capacity</span>, with <span class="steel">transfer time</span> to pay. Reload only when the transfer beats the recompute: measure it.</p>
-  <dl class="kit"><dt>try</dt><dd>LMCache MP · <b>--mamba-cache-mode align</b> · long disk-setup recipe: handout</dd><dt>check</dt><dd>sum(rate(vllm:external_prefix_cache_hits_total[5m])) / sum(rate(vllm:external_prefix_cache_queries_total[5m]))</dd></dl>
-  <p class="foot">Discrete-GPU tiers, schematic; the Spark shares CPU/GPU memory, so its experiment uses disk without CPU retention. vLLM v0.31.0: CPU offload size is GiB summed across GPUs. Router-visible native offload needs "self_describing_kv_events" and KV event publishing, both off by default. Bandwidths: vendor specs, PCIe 5 x16, Gen4–Gen5 NVMe.</p>
+  <dl class="kit"><dt>try</dt><dd>LMCache multiprocess server · <b>--mamba-cache-mode align</b> · disk-reuse procedure: handout</dd><dt>check</dt><dd>sum(rate(vllm:external_prefix_cache_hits_total[5m])) / sum(rate(vllm:external_prefix_cache_queries_total[5m]))</dd></dl>
+  <p class="foot">Discrete-GPU tiers, schematic; the Spark shares CPU/GPU memory, so its experiment uses disk without CPU retention. vLLM 0.31.0: CPU offload size is GiB summed across GPUs. Router-visible native offload needs "self_describing_kv_events" and KV event publishing, both off by default. Bandwidths: vendor specs, PCIe 5 x16, Gen4–Gen5 NVMe.</p>
   <aside class="notes">
     <p>On a discrete GPU, we can offload prefixes to CPU memory. LMCache also supports flash and remote storage. The Spark shares its CPU and GPU memory, so our experiment skips CPU retention and <strong>uses disk</strong>.</p>
-    <p>[click] Compare <strong>reload with recompute</strong>, <strong>including transfer time</strong>. Restart the cache process to prove reuse from disk. Later, a router also needs updates when cached blocks move; enable those events for offloaded prefixes.</p>
+    <p>[click] Compare <strong>reload with recompute</strong>, <strong>including transfer time</strong>. To verify reuse from disk, restart the cache process, then check the hit rate. Enable KV events, off by default, so a router can find offloaded prefixes.</p>
   </aside>
 </section>
 
 <section class="slide" data-move="4" data-play="belt" data-seconds="65" data-coach="Let each belt change settle. Distinguish checkpoint estimates from measured speed and Blackwell W4A4 from Hopper fallback.">
   <p class="kicker">Movement 4 · lever 2 · fewer weight bytes</p>
-  <h2>Weight quantization shrinks the weight read. The ceiling rises in proportion.</h2>
+  <h2>Weight quantization shrinks the <span class="nw">weight read.</span> The ceiling rises in proportion.</h2>
   <div class="stage shrink">
-    <div class="wb slabrow"><span class="tag">Qwen3.8-27B checkpoint · same weights, fewer bytes each · thickness to scale</span><div class="slab"><div class="cub cmat" aria-hidden="true"><i class="f"></i><i class="s"></i><i class="t"></i></div></div><b class="huge" data-vals="55.6,30.9,21.9" data-dec="1" data-suf=" GB" data-ms="1400">55.6 GB</b><span class="fmt" data-vals="0,1,2" data-map="bf16 · 16 bits,FP8 · 8 bits,NVFP4 · 4.5-bit feed-forward · FP8 attention" style="--d:.7s">bf16 · 16 bits</span></div>
+    <div class="wb slabrow"><span class="tag">Qwen3.8-27B checkpoint · same weights, fewer bytes each · thickness to scale</span><div class="slab"><div class="cub cmat" aria-hidden="true"><i class="f"></i><i class="s"></i><i class="t"></i></div></div><b class="huge" data-vals="55.6,30.9,21.9" data-dec="1" data-suf=" GB" data-ms="1400">55.6 GB</b><span class="fmt" data-vals="0,1,2" data-map="bf16 · 16 bits,FP8 · 8 bits,NVFP4 · 4.5-bit feed-forward · FP8 attention">bf16 · 16 bits</span></div>
     <div class="wb"><span class="tag">one-user ceiling · B200, 8 TB/s · one box = one token's weights</span><div class="belt"><i class="boxes"></i><i class="gpu">GPU</i></div><b class="huge green" data-vals="144,259,365" data-suf=" tok/s" data-ms="1400">144 tok/s</b></div>
   </div>
-  <p class="say" data-step="3">NVFP4 runs W4A4 (4-bit weights, 4-bit activations: the values passed between layers) only on Blackwell (B200). On Hopper, vLLM falls back to W4A16: <span class="steel">4-bit weights, 16-bit activations</span>.</p>
+  <p class="say" data-step="3">NVFP4 runs W4A4 (4-bit weights, 4-bit activations: the values passed between layers) only on Blackwell (B200, GB10). On Hopper, vLLM falls back to W4A16: <span class="steel">4-bit weights, 16-bit activations</span>.</p>
   <dl class="kit" data-step="3"><dt>Blackwell</dt><dd>vllm serve <b>nvidia/Qwen3.8-27B-NVFP4</b></dd><dt>Hopper</dt><dd>vllm serve Qwen/Qwen3.8-27B <b>--quantization fp8_per_tensor</b></dd><dt>check</dt><dd>log "Model loading took X GiB"; a Marlin warning means no 4-bit math</dd></dl>
-  <p class="foot">Belt schematic. Sizes: Qwen/Qwen3.8-27B, -FP8, nvidia/Qwen3.8-27B-NVFP4 (NVFP4 feed-forward blocks and lm_head; FP8 attention and DeltaNet). NVFP4: 4-bit values, an 8-bit scale per 16 weights, an FP32 scale per tensor. B200 8 TB/s: NVIDIA spec. vLLM v0.31.0: plain <span class="nw">--quantization fp8</span> no longer quantizes a bf16 checkpoint at load.</p>
+  <p class="foot">Belt schematic. Sizes: Qwen/Qwen3.8-27B, -FP8, nvidia/Qwen3.8-27B-NVFP4 (NVFP4 feed-forward blocks and lm_head; FP8 attention and DeltaNet). NVFP4: 4-bit values, an 8-bit scale per 16 weights, an FP32 scale per tensor. B200 8 TB/s: NVIDIA spec. vLLM 0.31.0: plain <span class="nw">--quantization fp8</span> no longer quantizes a bf16 checkpoint at load.</p>
   <aside class="notes">
-    <p>Now let's shrink the weights. Our bf16 checkpoint is fifty-six gigabytes; the B200 ceiling is a hundred forty-four tokens a second.</p>
+    <p>Lever two: shrink the weights. Our bf16 checkpoint is fifty-six gigabytes; the B200 ceiling is a hundred forty-four tokens a second.</p>
     <p>[click] FP8 nearly halves the file, so the <strong>estimated ceiling</strong> nearly doubles.</p>
     <p>[click] NVFP4 gets it to twenty-two gigabytes. Four-bit layers use <strong>under a third</strong> of bf16; attention and DeltaNet stay in FP8. The whole file is about two fifths. These are estimates, not measured speedups. [pause 3s: gesture the smaller weight read]</p>
     <p>[click] <strong>On Blackwell</strong>, four-bit layers use W4A4: four-bit weights and activations, the values passed between layers. <strong>H100 lacks FP4 math</strong> and uses sixteen-bit activations. I'd start with FP8 there; FP8-per-tensor converts bf16 at load.</p>
@@ -469,12 +459,12 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   <p class="kicker">Movement 4 · lever 2 · how NVFP4 works</p>
   <h2>NVFP4 stores 4-bit values with two levels of scale.</h2>
   <div class="stage fp4">
-    <div class="fp4-scale" data-step="1"><b>÷ 0.8125</b><span>4.70 ÷ 6 = 0.78, stored as the nearest 8-bit float, once per 16 weights, so the biggest weight lands near 6.</span></div>
+    <div class="fp4-scale" data-step="1"><b>÷ 0.8125</b><span>4.70 ÷ 6 = 0.78, rounded to the nearest 8-bit float: 0.8125. One scale per 16 weights puts the largest near 6.</span></div>
     <div class="fp4-row">
       <div class="cells bf" data-until="2"><i>0.81</i><i>−0.12</i><i>2.40</i><i class="tr">0.33</i><i>−1.05</i><i class="tr">0.07</i><i class="mx tr">4.70</i><i>−0.66</i><i>0.19</i><i>1.62</i><i>−2.95</i><i>0.48</i><i>−0.02</i><i>0.91</i><i>−0.37</i><i>1.24</i></div>
       <div class="cells q swap-in" data-step="2"><i>1</i><i>0</i><i>3</i><i class="tr">0.5</i><i>−1.5</i><i class="tr">0</i><i class="mx tr">6</i><i>−1</i><i>0</i><i>2</i><i>−4</i><i>0.5</i><i>0</i><i>1</i><i>−0.5</i><i>1.5</i></div>
     </div>
-    <div class="ruler" data-step="1"><span class="tag">the values NVFP4 can hold</span><div class="rl"></div></div>
+    <div class="ruler" data-step="1"><div class="rl"></div><span class="tag">the values NVFP4 can hold</span></div>
     <div class="fp4-tensor" data-step="3"><b>FP32 (32-bit float) tensor scale</b><div class="minis" data-repeat="6"><i></i></div><span class="tag">blocks of 16, one 8-bit scale each</span></div>
     <p class="say" data-step="4">Including scales, each weight uses <span class="green">under a third</span> of bf16 storage.</p>
     <p class="formula-s" data-step="4">4-bit values plus an 8-bit scale per 16 weights: 4.5 bits per weight.</p>
@@ -493,42 +483,42 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   <p class="kicker">Movement 4 · lever 2 · the quality checks</p>
   <h2>NVFP4 vs bf16: published score changes.</h2>
   <div class="stage gate2">
-    <p class="plain">Example budget: <b>at most 1 point loss</b>. <span class="green">Within budget</span> / <span class="fail">over budget</span>.<br>Dots show published means, not certainty about quality.</p>
-    <div class="axis2" data-step="0"><span style="--x:0">−10</span><span style="--x:35.71">−5</span><span class="budget-cut" style="--x:64.29">−1</span><span class="baseline" style="--x:71.43">0 = bf16</span><span style="--x:100">+4</span></div>
+    <p class="plain">Example budget: <b>at most 1.5 points loss</b>. <span class="green">Within budget</span> / <span class="fail">over budget</span>.<br>Dots are published means; paired uncertainty intervals are unavailable.</p>
+    <div class="axis2" data-step="0"><span style="--x:0">−10</span><span style="--x:35.71">−5</span><span class="budget-cut" style="--x:60.71">−1.5</span><span class="baseline" style="--x:71.43">0 = bf16</span><span style="--x:100">+4</span></div>
     <div class="qrow within" data-step="1"><div class="ql"><b>MMLU-Pro · knowledge</b><span>Qwen3.8-Flash-Next · 88.5 → 88.2 · 1 seed</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:69.29"></i></div><em class="green">−0.30 points</em></div>
-    <div class="qrow outside" data-step="2"><div class="ql"><b>SWE-bench Verified · coding agents</b><span>Qwen3.8-Flash-Next · 80.6 → 79.4 · 500 tasks, 1 seed</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:62.86"></i></div><em class="fail">−1.20 points</em></div>
+    <div class="qrow within" data-step="2"><div class="ql"><b>SWE-bench Verified · coding agents</b><span>Qwen3.8-Flash-Next · 80.6 → 79.4 · 500 tasks, 1 seed</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:62.86"></i></div><em class="green">−1.20 points</em></div>
     <div class="qrow within" data-step="3"><div class="ql"><b>MMLU-Pro · knowledge</b><span>Gemma-4-31B, thinking off · 85.41 → 84.50 · 3-seed mean</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:64.93"></i></div><em class="green">−0.91 points</em></div>
     <div class="qrow outside" data-step="4"><div class="ql"><b>MATH-500 · math</b><span>Gemma-4-31B, thinking off · 89.40 → 85.07 · 500 problems</span></div><div class="qtrack"><i class="zero"></i><i class="qdot" style="--x:40.5"></i></div><em class="fail">−4.33 points</em></div>
     <p class="say" data-step="5">Different quantized layers. <span class="green">Gate on your workload</span>, not on one exam.</p>
   </div>
   <dl class="kit complete-command" data-step="5"><dt>try</dt><dd>lm-eval run --model local-chat-completions --apply_chat_template \
   --model_args model=Qwen/Qwen3.8-27B,base_url=http://localhost:8000/v1/chat/completions \
-  <b>--tasks mmlu_pro</b> --num_fewshot 0 --seed 1234 --log_samples --output_path results/baseline</dd><dt>check</dt><dd>repeat both; pair cases/seeds; keep quality loss within your predeclared budget (slide 35)</dd></dl>
+  <b>--tasks mmlu_pro</b> --num_fewshot 0 --seed 1234 --log_samples --output_path results/baseline</dd><dt>check</dt><dd>repeat both; pair cases/seeds; keep quality loss within your predeclared budget (slide 36)</dd></dl>
   <p class="foot">RedHatAI model cards, evaluated on vLLM: Qwen3.8-Flash-Next-NVFP4 (1 seed, expert linears W4A4); gemma-4-31B-it-NVFP4 (3-seed means, block linears W4A4, lm-eval 0.4.11, zero-shot). No paired uncertainty interval is available here.</p>
   <aside class="notes">
-    <p>Now let's check the answers. These dots show <strong>published score changes</strong> from bf16 to NVFP4. The green band allows one percentage point of loss in this example; red is outside that budget. These means don't establish unchanged quality.</p>
-    <p>[click] First, Qwen3.8 Flash Next quantizes only the experts. Its MMLU-Pro knowledge score drops about a third of a point.</p>
+    <p>These dots show <strong>published score changes</strong> from bf16 to NVFP4. The green band allows one point five percentage points of loss in this example; red is outside that budget. A small drop in the mean doesn't prove quality held.</p>
+    <p>[click] First, Qwen3.8 Flash Next quantizes only the experts. Its MMLU-Pro knowledge score drops three tenths of a point.</p>
     <p>[click] On SWE-bench Verified, where coding agents fix GitHub issues, it loses one point two percentage points across five hundred tasks. That's <strong>one run</strong>.</p>
-    <p>[click] Now dense Gemma 4 31B: reasoning off, main matrix operations quantized. Over three seeds, its knowledge score drops about a point.</p>
-    <p>[click] On competition math, it loses <strong>four point three three points</strong>. That's a workload I'd want to investigate. [pause 3s: leave the math drop visible]</p>
+    <p>[click] Now dense Gemma 4 31B: thinking off, main matrix operations quantized. Over three seeds, its knowledge score drops just under a point.</p>
+    <p>[click] On competition math, it loses <strong>four point three three points</strong>. I'd investigate that workload. [pause 3s: leave the math drop visible]</p>
     <p>[click] The model, task and quantized layers all matter. <strong>Check your own workload</strong> before shipping; we'll finish with that recipe.</p>
   </aside>
 </section>
 
-<section class="slide" data-move="4" data-seconds="30" data-coach="Recall the earlier two-conversation prediction. Four is an ideal capacity estimate, not an admission guarantee.">
+<section class="slide" data-move="4" data-seconds="30" data-coach="Recall the Spark three-conversation prediction. Seven with FP8 is ideal arithmetic; confirm startup capacity.">
   <p class="kicker">Movement 4 · lever 3 · fewer KV bytes</p>
   <h2>FP8 KV first. More conversations fit.</h2>
   <div class="stage kvq">
-    <span class="tag">ideal payload budget after weights and runtime: ≈ 17.5 GiB</span>
-    <div class="kvslots"><div class="blk"><i></i><i></i><i data-step="1" style="--d:.25s"></i><i data-step="1" style="--d:.25s"></i></div></div>
-    <div class="fitcount2"><span class="tag">128k conversations · ideal payload estimate</span><b class="huge" data-vals="0,1" data-map="2,4" style="--d:.6s">2</b></div>
+    <span class="tag">ideal payload budget after weights and runtime: ≈ 29.4 GiB on the Spark</span>
+    <div class="kvslots"><div class="blk"><i></i><i></i><i></i><i data-step="1" style="--d:.25s"></i><i data-step="1" style="--d:.25s"></i><i data-step="1" style="--d:.25s"></i><i data-step="1" style="--d:.25s"></i></div></div>
+    <div class="fitcount2"><span class="tag">conversations · ideal payload estimate</span><b class="huge" data-vals="0,1" data-map="3,7" style="--d:.6s">3</b><span class="ctxlbl">128k context</span></div>
     <div class="ladder" data-step="1"><span class="on">FP8 · roughly half the payload</span></div>
   </div>
   <dl class="kit" data-step="1"><dt>try</dt><dd>vllm serve Qwen/Qwen3.8-27B <b>--kv-cache-dtype fp8</b></dd><dt>check</dt><dd>startup log "GPU KV cache size: N tokens", before and after</dd></dl>
-  <p class="foot">Qwen3.8-27B at 128k, 17.5 GiB budget (slide 11): 8.1 GiB per conversation in bf16, 4.1 GiB in FP8, each with its unchanged 147 MiB state. Estimates, not measured admission limits.</p>
+  <p class="foot">DGX Spark, Qwen3.8-27B at 128k; ≈ 29.4 GiB payload budget (slide 11): 8.1 GiB per bf16 conversation, 4.1 GiB in FP8, including unchanged 147 MiB state. Estimates, not measured admissions; startup allocation also includes state copies and padding.</p>
   <aside class="notes">
-    <p>Let's go back to the conversations that didn't fit. We estimated room for two at a hundred twenty-eight k. This time we'll shrink the cache instead of the weights.</p>
-    <p>[click] FP8 roughly halves the <strong>attention cache</strong>, so the same budget allows four. The <strong>fixed DeltaNet state stays wide</strong>. That's ideal arithmetic; <strong>confirm the capacity</strong> in the startup log.</p>
+    <p>Back to the conversations that didn't fit. Our Spark estimate allowed three at a hundred twenty-eight k. This time we'll shrink the cache instead of the weights.</p>
+    <p>[click] FP8 roughly halves the <strong>attention cache</strong>, so the same budget allows seven. The <strong>fixed DeltaNet state stays wide</strong>. That's ideal arithmetic; <strong>confirm the capacity</strong> in the startup log.</p>
   </aside>
 </section>
 
@@ -552,11 +542,11 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
     </div>
     <div class="pside">
       <div class="pcase" data-step="1"><span class="tag"><span class="src">vLLM's published burst test</span> · <span class="nw">Llama-3.3-70B</span> · 4× H100 · P99 (99th percentile) TTFT</span><div class="pv"><b class="steel">17 s</b><span>bf16 KV</span><b class="green">1.3 s</b><span>FP8 KV</span></div></div>
-      <div class="pcase" data-step="2"><span class="tag">Qwen3-30B-A3B-Instruct-2507 · MoE · 2× H100 · memory to spare</span><div class="pv"><b>same</b><span>FP8 KV = bf16 KV</span></div></div>
+      <div class="pcase" data-step="2"><span class="tag">Qwen3-30B-A3B-Instruct-2507 · MoE · 2× H100 · memory to spare</span><div class="pv"><b>same</b><span>throughput, FP8 KV vs bf16 KV</span></div></div>
       <p class="pflag" data-step="3">No calibrated KV scales in the checkpoint: vLLM uses a default scale and logs a warning.</p>
     </div>
   </div>
-  <p class="foot">vLLM blog, 22 Apr 2026 (crossover, gpt-oss-20b, v0.19.1, concurrency 1; full FP8 crosses at 22,109 on H100, ≈ 13k on B200) and 11 May 2026 (burst TTFT, 300 prompts, 1,024 in / 512 out, v0.20.2). Curve shape schematic. Default scale: vLLM v0.31.0 kv_cache.py.</p>
+  <p class="foot">vLLM blog, 22 Apr 2026 (crossover, gpt-oss-20b, v0.19.1, concurrency 1; full FP8 crosses at 22,109 on H100, ≈ 13k on B200) and 11 May 2026 (Llama burst TTFT, 300 prompts, 1,024 in / 512 out; Qwen throughput across request rates; v0.20.2). Curve shape schematic. Default scale: vLLM 0.31.0 kv_cache.py.</p>
   <aside class="notes">
     <p>Does a smaller cache make each token faster? At short context, <strong>weights dominate</strong>, and conversion can make FP8 KV slower. Here, gpt-oss 20B on H100 pulls ahead near eight thousand tokens, with windowed layers kept in bf16. <strong>Measure your own crossover</strong>.</p>
     <p>[click] Capacity can help sooner: more requests fit, so fewer wait for cache room. In this vLLM burst, three hundred prompts arrived together: Llama 3.3 70B on four H100s. P99 first-token latency fell from seventeen seconds to one point three.</p>
@@ -567,7 +557,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
 
 <section class="slide" data-move="4" data-play="grid" data-seconds="40" data-coach="One channel, one grid. If behind, say: 'Lower-bit designs must place codes where the data lives.' Then Shift+Right to K versus V.">
   <p class="kicker">Movement 4 · lever 3 · asymmetric quantization</p>
-  <h2>A KV channel can be off-center. Put the codes where its values are.</h2>
+  <h2>Cached values can cluster away from zero. <br>Put the quantization levels where the values are.</h2>
   <div class="stage asym">
     <svg class="nl" viewBox="0 0 1152 300" role="img" aria-label="Number line with symmetric and asymmetric 4-bit grids">
       <path class="axis" d="M40 150 H1112"/>
@@ -586,7 +576,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
     <div class="used" data-step="1"><span class="tag">codes that land in range</span><b class="huge">9 / 16</b></div>
   </div>
   <p class="say" data-step="3">At 2 bits there are only 4 codes. Wasting half leaves 2 usable codes.<br><span class="steel">vLLM's FP8 KV stays symmetric</span>: 8 bits have codes to spare.</p>
-  <p class="foot">Worked example, one channel in [−0.4, 2.0]. Symmetric: scale = 2.0 ÷ 7, codes −8…7. Asymmetric: scale = 2.4 ÷ 15, zero-point shifts the grid. KIVI, arXiv:2402.02750. vLLM v0.31.0 FP8 KV is symmetric only (compressed_tensors.py:1095).</p>
+  <p class="foot">Worked example, one channel in [−0.4, 2.0]. Symmetric: scale = 2.0 ÷ 7, codes −8…7. Asymmetric: scale = 2.4 ÷ 15, zero-point shifts the grid. KIVI, arXiv:2402.02750. vLLM 0.31.0 FP8 KV is symmetric only (compressed_tensors.py:1095).</p>
   <aside class="notes">
     <p>To fit more context with fewer bits, we need to place the available values carefully. Here, one channel means the <strong>same coordinate across tokens</strong>. Most values sit above zero.</p>
     <p>[click] With a symmetric grid centered on zero, seven of sixteen codes land where there's no data. [pause 2s: point to the unused codes]</p>
@@ -595,7 +585,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </aside>
 </section>
 
-<section class="slide" data-move="4" data-seconds="60" data-coach="Point to the changed attention winner, then the unchanged shares. Ask the six-bit question, wait five seconds, reveal the measured split.">
+<section class="slide" data-move="4" data-seconds="60" data-coach="Point to the changed attention winner, then the unchanged shares. Ask how to split the same storage budget, wait five seconds, reveal the measured split. Both choices average three bits per number; the reference uses eight bits for each key and value.">
   <p class="kicker">Movement 4 · lever 3 · K costs more than V</p>
   <h2>A key error changes who gets attention. A value error changes the mix.</h2>
   <div class="stage kvsens">
@@ -612,13 +602,13 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
       <p class="cap">shifts by 0.23 × the error: <span class="teal">a change in the mix</span>, not always harmless</p>
     </div>
   </div>
-  <div class="ppl" data-step="3"><div class="pc"><span class="tag">6 bits · <span class="violet">keys 4</span> + <span class="teal">values 2</span></span><b class="green">10.1</b></div><div class="pc"><span class="tag">6 bits · <span class="violet">keys 2</span> + <span class="teal">values 4</span></span><b class="fail">31.5</b></div><p>perplexity, lower is better (8-bit K and V: 9.95). <b>Give the bits to <span class="violet">K</span>, in this measured example.</b></p></div>
-  <p class="foot">Attention shares: illustrative, softmax over scores [2.0, 1.2, 0.4, 0.9]. Perplexity: Wikitext, Transformers KIVI-HQQ, KVTuner arXiv:2502.04420 Table 2 (Llama3-8B-Instruct; KV8 baseline 9.95). QAQ, arXiv:2403.04643, §3.1.</p>
+  <div class="ppl" data-step="3"><div class="pc"><span class="tag"><span class="violet">4-bit keys</span> + <span class="teal">2-bit values</span></span><b class="green">10.1</b></div><div class="pc"><span class="tag"><span class="violet">2-bit keys</span> + <span class="teal">4-bit values</span></span><b class="fail">31.5</b></div><p><b class="src">KVTuner · Table 2</b><br>Both average <b>3 bits per number</b>.<br>Reference (8-bit keys, 8-bit values): 9.95.<br>Perplexity: lower is better. <b>Give more bits to <span class="violet">K</span> here.</b></p></div>
+  <p class="foot">KVTuner: Sensitivity-Aware Layer-wise Mixed Precision KV Cache Quantization for Efficient and Nearly Lossless LLM Inference. arXiv:2502.04420, Table 2: Llama3-8B-Instruct, Wikitext, Transformers KIVI-HQQ. Attention shares are illustrative: softmax over [2.0, 1.2, 0.4, 0.9]. Mechanism: QAQ, arXiv:2403.04643, §3.1.</p>
   <aside class="notes">
     <p>We can give keys and values different numbers of bits. <strong>Keys set</strong> each token's attention; <strong>values supply</strong> what gets mixed. Here, token one gets half the attention.</p>
-    <p>[click] Change a key and token two wins. Attention now favors a different token.</p>
-    <p>[click] Change a value and the shares stay fixed. Its output error is multiplied by point two three. With six bits to split, where would you spend more? [hold]</p>
-    <p>[click] A KVTuner test on Llama three 8B tried that split. Perplexity measures surprise at real text; lower is better. Using four-bit keys and two-bit values keeps it close to eight-bit precision. Reverse the split: thirty-one point five. <strong>Here, keys need more bits</strong>.</p>
+    <p>[click] Change a key and token two wins.</p>
+    <p>[click] Change a value and the shares stay fixed. Its output error is multiplied by point two three. Same storage budget: more bits for keys or values? [hold]</p>
+    <p>[click] KVTuner tried four-bit keys and two-bit values, then the reverse: <strong>three bits per number on average</strong>. Perplexity, lower is better: ten point one versus thirty-one point five. The eight-bit reference uses <strong>eight bits for each</strong>. Here, keys need more bits.</p>
   </aside>
 </section>
 
@@ -636,7 +626,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   <dl class="kit"><dt>try</dt><dd>vllm serve Qwen/Qwen3.8-27B <b>--kv-cache-dtype turboquant_k8v4</b></dd><dt>check</dt><dd>startup log "GPU KV cache size: N tokens", Mean TPOT and P95 TTFT, all vs fp8</dd></dl>
   <p class="foot">vLLM blog, 11 May 2026, v0.20.2, offline, 200 prompts: k8v4 throughput 80% of bf16 (Qwen3-30B-A3B, 2×H100) and 75% (Llama-3.3-70B, 4×H100); 2.4× measured capacity; "no significant advantage over FP8". FP8 2.0×: 16 ÷ 8 bits per KV value.</p>
   <aside class="notes">
-    <p>vLLM offers a different split: TurboQuant k8v4, eight-bit keys and four-bit values. These tests held two point four times the bf16 cache payload, versus two times for FP8.</p>
+    <p>vLLM offers a different split: TurboQuant k8v4, eight-bit keys and four-bit values. These tests held two point four times the bf16 cache payload; FP8 gives two times by bit count.</p>
     <p>[click] In the two model tests shown here, <strong>throughput fell</strong> to seventy-five to eighty percent of bf16.</p>
     <p>[click] I'd start with FP8. If capacity still blocks you, try k8v4 and <strong>time it before keeping it</strong>.</p>
   </aside>
@@ -653,7 +643,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
     <div class="verify" data-step="2"><span>target model checks all five in one pass</span></div>
     <div class="srow"><span class="who">kept</span><span class="tk ok" data-step="3">self</span><span class="tk ok" data-step="3" style="--d:.1s">,</span><span class="tk ok" data-step="3" style="--d:.2s">path</span><span class="tk fix" data-step="3" style="--d:.3s" data-cap="from the target">)</span><span class="gain" data-step="3" style="--d:.9s">4 tokens · 1 weight read</span></div>
   </div>
-  <p class="foot">Greedy illustration; sampled decoding preserves the target distribution in theory; finite-precision numerics can differ (vLLM v0.31.0 lossless guarantees). Leviathan et al., arXiv:2211.17192: 2×–3× on T5-XXL, batch 1.</p>
+  <p class="foot">Greedy illustration; sampled decoding preserves the target distribution in theory; finite-precision numerics can differ (vLLM 0.31.0 lossless guarantees). Leviathan et al., arXiv:2211.17192: 2×–3× on T5-XXL, batch 1.</p>
   <aside class="notes">
     <p>So far we've saved work or reduced bytes. Speculative decoding tries to get <strong>several tokens from each</strong> expensive weight read.</p>
     <p>[click] First, a drafter guesses a few tokens ahead. That's a <strong>cheaper predictor</strong>, such as a smaller model or extra prediction layers attached to the main model.</p>
@@ -664,9 +654,9 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
 
 <section class="slide" data-move="4" data-play="accept" data-seconds="50" data-coach="Ask about 70%, wait five seconds, then reveal about three. Point from acceptance length to the clock: both must be measured.">
   <p class="kicker">Movement 4 · lever 4 · the math, without the math</p>
-  <h2>Acceptance, not the flag, sets tokens per pass.</h2>
+  <h2>Tokens per pass depend on acceptance.</h2>
   <div class="stage accsim">
-    <p class="plain">Draft 5 tokens. Each is right with some chance. <span class="green">Keep them until the first miss</span>, then the big model adds one of its own.</p>
+    <p class="plain">Draft 5 tokens. Each is right with some chance. <span class="green">Keep them until the first miss</span>, then the target adds one of its own.</p>
     <div class="simrow" data-a="0.5"><b>50% right</b><div class="chips"><i></i><i></i><i></i><i></i><i></i><i class="bonus">+1</i></div><span class="pass">…</span><div class="avg" data-step="1"><em>avg</em><b class="run">–</b></div></div>
     <div class="simrow" data-a="0.7"><b>70% right</b><div class="chips"><i></i><i></i><i></i><i></i><i></i><i class="bonus">+1</i></div><span class="pass">…</span><div class="avg" data-step="1"><em>avg</em><b class="run">–</b></div></div>
     <div class="simrow" data-a="0.9"><b>90% right</b><div class="chips"><i></i><i></i><i></i><i></i><i></i><i class="bonus">+1</i></div><span class="pass">…</span><div class="avg" data-step="1"><em>avg</em><b class="run">–</b></div></div>
@@ -686,9 +676,9 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   <h2>Match the drafter to your traffic.</h2>
   <div class="stage accept">
     <div class="picks">
-      <div class="cool"><b>Trained draft layers</b><span>EAGLE-3, DSpark or the model's own draft layers (MTP, multi-token prediction). <span class="src">A published Qwen3.8-27B DSpark speculator:</span> <b class="green">3.76</b> output tokens per pass, including the target token, on tool calls. <i class="nb">Agent receipt: acceptance, not a measured speedup.</i></span></div>
+      <div class="cool"><b>Trained draft heads</b><span>EAGLE-3, DSpark or the model's own draft layers (MTP, multi-token prediction). <span class="src">A published Qwen3.8-27B DSpark speculator:</span> <b class="green">3.76</b> output tokens per pass, including the target token, on tool calls. <i class="nb">Acceptance only; speedup not measured.</i></span></div>
       <div class="cool" data-step="1"><b>N-gram lookup</b><span>Match the latest tokens to an earlier prompt sequence; propose what followed. No training.</span></div>
-      <div class="hot" data-step="3"><b>Never</b><span>a draft model as slow as the target</span></div>
+      <div class="hot" data-step="3"><b>Never use</b><span>a draft model as slow as the target.</span></div>
     </div>
     <p class="rowcap" data-step="1">n-gram speedup</p>
     <div class="arow" data-step="1"><span class="who">instructions</span><span class="tk ok">the</span><span class="tk ok">answer</span><span class="tk no">depends</span><span class="tk dim">on</span><span class="tk dim">what</span><div class="am"><i style="--w:48"></i></div><b class="ax">1.16×</b></div>
@@ -706,46 +696,49 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </aside>
 </section>
 
-<section class="slide" data-move="4" data-seconds="60" data-coach="Frame this as the practical experiment: apply the session levers to one deployment. Left is the short diagnostic; right is the recorded long coding-request replay. Each panel has its own scale. Use the two scales separately. Name the latency cost and the matched KV change.">
+<section class="slide" data-move="4" data-seconds="60" data-coach="Start with the measured bf16 baseline using normal vLLM execution defaults, then apply the session levers to one deployment. Left is the short diagnostic; right is the recorded long coding-request replay. Each panel has its own scale. Compare four, eight and sixteen in flight. Name the common 64 GiB allocation and compare throughput with first-token wait; the handout explains how to run a matched comparison. Short test: attention KV is about 9.4 MB against 17.6 GB of weights per step. The long replay is not short-context: median 79k input. Prefix-token hits fall from 97.34% to 95.46% to 92.96%. Smaller formats add capacity; format-specific kernels and cache layout can offset byte savings, but their individual costs were not isolated. Treat lower precision as a capacity option, then measure throughput, first-token wait and quality.">
   <p class="kicker">Movement 4 · the practical experiment</p>
-  <h2>Practical experiment: tune one vLLM deployment</h2>
+  <h2>Practical experiment: tune one vLLM deployment.</h2>
   <div class="stage sparkcase">
     <div class="spark-panel" style="--max:60">
       <h3>1. Diagnose, then tune</h3>
       <span class="tag">output tok/s · 1 client · 128 output tokens</span>
       <div class="spark-rows">
-        <div class="hb base" data-step="0" style="--w:4.4648"><b>bf16 · eager</b><div class="b"><i></i></div><em>4.46</em></div>
-        <div class="hb base" data-step="0" style="--w:4.45077"><b>Restore defaults</b><div class="b"><i></i></div><em>4.45</em></div>
-        <div class="hb" data-step="1" style="--w:12.10561"><b>Quantize weights</b><div class="b"><i></i></div><em>12.11</em></div>
+        <div class="hb base" data-step="0" style="--w:4.45077"><b>bf16 · defaults</b><div class="b"><i></i></div><em>4.45</em></div>
+        <div class="hb" data-step="1" style="--w:12.10561"><b>NVFP4 weights</b><div class="b"><i></i></div><em>12.11</em></div>
         <div class="hb flat" data-step="2" style="--w:12.09336"><b>Try FP8 KV</b><div class="b"><i></i></div><em>12.09</em></div>
-        <div class="hb flat" data-step="2" style="--w:12.02839"><b>Try NVFP4 KV</b><div class="b"><i></i></div><em>12.03</em></div>
-        <div class="hb" data-step="3" style="--w:50.18806"><b>DSpark · 7 draft tokens</b><div class="b"><i></i></div><em>50.19</em></div>
+        <div class="hb flat" data-step="3" style="--w:12.02839"><b>Try NVFP4 KV</b><div class="b"><i></i></div><em>12.03</em></div>
+        <div class="hb" data-step="4" style="--w:50.18806"><b>DSpark · 7 draft tokens</b><div class="b"><i></i></div><em>50.19</em></div>
       </div>
       <div class="spark-axis"><span>0</span><span>60</span></div>
-      <p class="spark-caption" data-step="2">Per decode step: <b>≈9.4 MB of attention KV</b> vs ≈17.6 GB of weights. Smaller KV adds room; short decode stays flat.</p>
+      <p class="spark-caption" data-step="3">Per decode step: <b>≈9.4 MB of attention KV</b> vs ≈17.6 GB of weights. Smaller KV adds room; short decode stays flat.</p>
     </div>
-    <div class="spark-panel spark-load" style="--max:100" data-step="4">
+    <div class="spark-panel spark-load" style="--max:100" data-step="5">
       <h3>2. Coding agent spawning subagents</h3>
       <span class="tag">recorded replay · median 79k in / 267 out</span>
       <table class="spark-matrix">
         <caption>Total output tok/s · below: P95 first-token wait</caption>
-        <thead><tr><th>KV format</th><th>8 in flight</th><th>16 in flight</th></tr></thead>
+        <thead><tr><th>KV · 64 GiB each</th><th>4 in flight</th><th>8 in flight</th><th>16 in flight</th></tr></thead>
         <tbody>
-          <tr><th>Default</th><td class="best"><b>89.45</b><small>8.81 s</small></td><td class="loss"><b>26.16</b><small>239.52 s</small></td></tr>
-          <tr><th>FP8</th><td class=""><b>79.59</b><small>18.75 s</small></td><td class=""><b>77.78</b><small>52.02 s</small></td></tr>
-          <tr><th>NVFP4</th><td class=""><b>53.17</b><small>42.54 s</small></td><td class=""><b>53.04</b><small>104.55 s</small></td></tr>
+          <tr data-step="5"><th>bf16 (default)</th><td class="best"><b>73.71</b><small>8.62 s</small></td><td class="best"><b>89.08</b><small>8.74 s</small></td><td class="best"><b>87.51</b><small>29.54 s</small></td></tr>
+          <tr data-step="6"><th>FP8</th><td><b>67.54</b><small>10.27 s</small></td><td><b>77.57</b><small>19.66 s</small></td><td><b>76.12</b><small>55.50 s</small></td></tr>
+          <tr data-step="7"><th>NVFP4</th><td><b>47.59</b><small>17.94 s</small></td><td><b>52.11</b><small>43.67 s</small></td><td><b>52.07</b><small>105.65 s</small></td></tr>
         </tbody>
       </table>
-      <p class="spark-caption">4 in flight, default KV: <b>74.51 tok/s · 5.31 s P95</b>.<br>Native MTP · 7 draft tokens · priming excluded.</p>
+      <p class="spark-caption" data-step="8"><b>More token capacity did not mean more throughput.</b><br>64 GiB per format; same 8 GiB memory guard.</p>
     </div>
   </div>
-  <p class="foot">Qwen3.8-27B · GB10 · vLLM 0.32.0 · 25–26 Oct 2026. Medians of 3 × 16 requests. Left: drafter uses default KV. Right: recorded replay; priming excluded. Different traffic: do not multiply gains. Long-context quality unchecked. Runs and ranges: handout.</p>
+  <p class="foot">Qwen3.8-27B · GB10 · vLLM 0.32.0 · 25–27 Oct 2026. Right: NVFP4 weights, native MTP7; FP4 kernel autotuning off. Medians: 3 × 16 requests; 2 × Spark1 + Spark2; primers excluded. 4-in-flight run before restart; thermal/order effects possible. Don't multiply gains across workloads. Experiment methods: handout.</p>
   <aside class="notes">
-    <p>Now let's <strong>put those levers together</strong>. Our Spark starts near four point five tokens a second. Defaults barely change decode.</p>
-    <p>[click] <strong>Weight quantization</strong> takes us to twelve point one, shrinking the weight read.</p>
-    <p>[click] Smaller KV stays near twelve <strong>in this short test</strong>; weights still dominate.</p>
-    <p>[click] The separate drafter hits fifty here; the longer replay uses <strong>native MTP</strong>.</p>
-    <p>[click] Picture a <strong>coding agent spawning subagents</strong>: several calls in flight. We replay sixteen recorded coding requests: long histories, short replies. Typically <strong>seventy-nine thousand input tokens</strong>, with two hundred and sixty-seven output tokens. Default KV wins at eight; FP8 helps at sixteen. This tests serving, <strong>not a live agent run</strong>. [pause 3s: point from throughput to first-token wait]</p>
+    <p><strong>bf16 defaults</strong>: <strong>four point five</strong> tokens a second.</p>
+    <p>[click] <strong>NVFP4 weights</strong>: twelve point one.</p>
+    <p>[click] FP8 KV <strong>stays flat</strong>: KV is tiny beside the weights.</p>
+    <p>[click] NVFP4 too.</p>
+    <p>[click] DSpark reaches fifty; long requests use <strong>native MTP</strong>.</p>
+    <p>[click] Now the <strong>long coding-request replay</strong>: seventy-nine thousand input tokens.</p>
+    <p>[click] FP8 stores <strong>more tokens</strong>, but reuses fewer prefix tokens.</p>
+    <p>[click] NVFP4 too. Kernel costs may offset smaller reads; <strong>we haven't isolated why</strong>.</p>
+    <p>[click] At <strong>sixty-four gibibytes</strong> each, default is fastest here. Smaller KV buys room; check <strong>speed, first-token wait and quality</strong>.</p>
   </aside>
 </section>
 
@@ -781,7 +774,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </aside>
 </section>
 
-<section class="slide" data-move="5" data-play="router" data-seconds="65" data-coach="Let several random misses show, then switch to prefix routing. Follow the same tenant color. Pause before giving the published result.">
+<section class="slide" data-move="5" data-play="router" data-seconds="50" data-coach="Let several random misses show, then switch to prefix routing. Follow the same tenant color. Pause before giving the published result.">
   <p class="kicker">Movement 5 · llm-d · route to the cache</p>
   <h2>Random routing repeats each shared prefix's prefill across pods.</h2>
   <div class="stage router">
@@ -807,15 +800,15 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   <dl class="kit" data-step="1"><dt>try</dt><dd>precise-prefix-cache-routing · helm chart <b>llm-d-router-standalone</b> v0.11.0</dd><dt>check</dt><dd>prefix token hit rate per pod, before and after</dd></dl>
   <p class="foot">llm-d blog, 24 Sep 2025: 8 vLLM pods × 2 H100, 32B Qwen, 150 tenants × 6,000-token shared prefix. Random vs precise prefix-aware routing.</p>
   <aside class="notes">
-    <p>Let's follow one request through that setup. Each color is a team's shared prefix; each pod has room for two. Prefix A is warm on pod one. Random routing sends this request to pod three, which computes the <strong>same six thousand tokens again</strong>. Most requests in this simulation miss that way.</p>
-    <p>[click] Switch to prefix-aware routing and A returns to pod one. It gets a hit. Requests follow their prefixes, spilling over when a pod saturates.</p>
-    <p>[click] [pause 3s: look up before the measured result] In llm-d's benchmark, sixteen H100s served a hundred fifty tenants. Ninetieth-percentile first-token latency fell from about ninety-three seconds to half a second; output throughput doubled. Random routing is a poor fit for that traffic, so <strong>measure your own gain</strong>. [beat] We've taken prefix reuse from one server to the fleet.</p>
+    <p>Each color is a team's six-thousand-token prefix; each pod holds two. Prefix A is warm on pod one. Random routing sends it elsewhere, so the <strong>same prefix is computed again</strong>.</p>
+    <p>[click] Switch to prefix-aware routing: A returns to pod one. It hits the cache. When that pod saturates, requests spill to another.</p>
+    <p>[click] [pause 3s: look up before the measured result] llm-d's sixteen-H100 benchmark cut ninetieth-percentile first-token latency from ninety-three seconds to half a second; output doubled. <strong>Measure your own gain</strong>.</p>
   </aside>
 </section>
 
 <section class="slide" data-move="5" data-seconds="60" data-coach="Reveal code and business traffic first. Ask about reasoning, wait five seconds, then reveal the near-zero gain.">
   <p class="kicker">Movement 5 · llm-d · what routing can't do</p>
-  <h2>Three workloads. Matched replicas in each test.</h2>
+  <h2>Routing saves prefill. It can't shrink decode.</h2>
   <div class="stage qserve">
     <p class="say s">llm-d's default router vs Kubernetes round-robin, same replica count per test. <span class="mute">Dashed line: round-robin, 1×.</span></p>
     <div class="hb" data-step="1"><b>Code generation · input tok/s</b><div class="b"><i style="--w:2.9"></i></div><em>2.9×</em></div>
@@ -832,20 +825,78 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </aside>
 </section>
 
+<section class="slide" data-move="5" data-seconds="40" data-coach="Trace the KV payload: source GPU, network card, RoCE or InfiniBand, destination card, destination GPU. NIXL coordinates the transfer through UCX. GPUDirect RDMA avoids staging the payload in system RAM; CPU control work still exists. This is the transfer mechanism used for P/D, not automatic prefix discovery.">
+  <p class="kicker">Movement 5 · llm-d · GPU-to-GPU KV transfer</p>
+  <h2>Move cached KV directly between GPUs.</h2>
+  <div class="stage kvshare">
+    <svg viewBox="0 0 1152 390" role="img" aria-label="KV blocks A, B and C travel from the source GPU to its network card, across RoCE or InfiniBand, through the destination network card, and directly into the destination GPU. NIXL uses UCX for this GPUDirect RDMA path, without staging the KV payload in system RAM.">
+      <defs>
+        <pattern id="share-kv-dots" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="7" fill="var(--violet-fill)"/><circle cx="3" cy="3" r="1.2" fill="var(--dot)"/></pattern>
+        <g id="share-prefix"><rect width="62" height="38" rx="5" style="fill:url(#share-kv-dots);stroke:var(--violet)"/><rect x="71" width="62" height="38" rx="5" style="fill:url(#share-kv-dots);stroke:var(--violet)"/><rect x="142" width="62" height="38" rx="5" style="fill:url(#share-kv-dots);stroke:var(--violet)"/><text x="31" y="25" style="fill:var(--fill-ink);font:600 16px var(--text);text-anchor:middle">A</text><text x="102" y="25" style="fill:var(--fill-ink);font:600 16px var(--text);text-anchor:middle">B</text><text x="173" y="25" style="fill:var(--fill-ink);font:600 16px var(--text);text-anchor:middle">C</text></g>
+        <g id="share-nic-board">
+          <rect width="82" height="78" rx="6" style="fill:var(--green-fill);stroke:var(--green)"/>
+          <path d="M8 16 H18 V27 H25 M8 39 H25 M8 61 H18 V51 H25 M57 27 H65 V16 H74 M57 39 H74 M57 51 H65 V61 H74" style="fill:none;stroke:var(--green-fill-ink);stroke-width:1.5;opacity:.7"/>
+          <rect x="25" y="23" width="32" height="32" rx="3" style="fill:var(--green-fill-ink)"/>
+          <path d="M33 18 V23 M41 18 V23 M49 18 V23 M33 55 V61 M41 55 V61 M49 55 V61" style="stroke:var(--green-fill-ink);stroke-width:2"/>
+          <path d="M24 71 V78 M32 71 V78 M40 71 V78 M48 71 V78 M56 71 V78" style="stroke:var(--green-fill-ink);stroke-width:4;opacity:.8"/>
+          <circle cx="8" cy="8" r="2" style="fill:var(--green-fill-ink);opacity:.65"/><circle cx="74" cy="8" r="2" style="fill:var(--green-fill-ink);opacity:.65"/>
+        </g>
+      </defs>
+      <g class="share-software">
+        <text class="share-software-title" x="576" y="34" text-anchor="middle">NIXL → UCX</text>
+        <text class="share-small" x="576" y="63" text-anchor="middle">transfer library → network backend</text>
+      </g>
+      <text class="share-pod-label" x="0" y="119">Source GPU</text>
+      <text class="share-pod-label" x="916" y="119">Destination GPU</text>
+      <rect class="share-tier share-gpu" x="0" y="142" width="236" height="140" rx="14"/>
+      <text class="share-tier-label" x="16" y="175">GPU memory</text>
+      <use href="#share-prefix" x="16" y="201"/>
+      <rect class="share-tier share-gpu" x="916" y="142" width="236" height="140" rx="14"/>
+      <text class="share-tier-label" x="932" y="175">GPU memory</text>
+      <use class="share-received" href="#share-prefix" x="932" y="201" data-step="3" style="--d:.65s"/>
+      <use class="share-nic" href="#share-nic-board" x="300" y="177"/>
+      <text class="share-nic-label" x="341" y="162" text-anchor="middle">Network card</text>
+      <use class="share-nic" href="#share-nic-board" x="770" y="177"/>
+      <text class="share-nic-label" x="811" y="162" text-anchor="middle">Network card</text>
+      <path class="share-wire share-gpu-read draw" data-step="1" pathLength="1" d="M236 216 H297"/>
+      <g class="share-wire-label" data-step="1"><text x="268" y="199" text-anchor="middle">read</text></g>
+      <g class="share-tip" data-step="1" style="--d:.6s"><path d="M289 210 L299 216 L289 222Z"/></g>
+      <path class="share-wire share-network draw" data-step="2" pathLength="1" d="M382 216 H767"/>
+      <g class="share-wire-label" data-step="2">
+        <text class="share-transport" x="576" y="188" text-anchor="middle">RoCE / InfiniBand</text>
+        <text class="share-rdma" x="576" y="255" text-anchor="middle">GPUDirect RDMA</text>
+        <text x="576" y="343" text-anchor="middle">RDMA: remote direct memory access</text>
+        <text x="576" y="369" text-anchor="middle">RoCE: RDMA over Converged Ethernet</text>
+      </g>
+      <g class="share-tip" data-step="2" style="--d:.6s"><path d="M759 210 L769 216 L759 222Z"/></g>
+      <path class="share-wire share-gpu-write draw" data-step="3" pathLength="1" d="M852 216 H913"/>
+      <g class="share-wire-label" data-step="3"><text x="884" y="199" text-anchor="middle">write</text></g>
+      <g class="share-tip" data-step="3" style="--d:.6s"><path d="M905 210 L915 216 L905 222Z"/></g>
+    </svg>
+    <p class="share-rule" data-step="3"><b>The KV payload does not stage in system RAM.</b></p>
+  </div>
+  <p class="foot">Schematic GPUDirect RDMA path: compatible registered GPU buffers and connector coordination required. llm-d P/D uses NIXL; UCX is the default backend for on-prem RoCE/InfiniBand. This transfer mechanism does not provide automatic prefix discovery.</p>
+  <aside class="notes">
+    <p><strong>NIXL coordinates the KV transfer</strong>; UCX connects it to the network.</p>
+    <p>[click] With <strong>GPUDirect RDMA</strong>, remote direct memory access, the network card reads the registered GPU buffer.</p>
+    <p>[click] The payload crosses <strong>RoCE</strong>, RDMA over Converged Ethernet, <strong>or InfiniBand</strong> to the destination card.</p>
+    <p>[click] It writes directly into the destination GPU. <strong>No system-RAM staging for the KV payload</strong>. Next, llm-d's prefill/decode split uses this path.</p>
+  </aside>
+</section>
+
 <section class="slide" data-move="5" data-seconds="45" data-coach="If behind, say: 'Tune chunked prefill first; consider separate prefill pods for long prompts and strict TTFT only with a fast KV-transfer path.' Then Shift+Right.">
   <p class="kicker">Movement 5 · llm-d · split prefill and decode</p>
-  <h2>Long prompts get their own prefill pods.</h2>
+  <h2>Disaggregated P/D: prefill pods, decode pods.</h2>
   <div class="stage pdsplit">
     <div class="pool hot"><span class="badge" data-step="1">added: prompt mostly uncached</span><span class="tag">prefill pod</span><div class="gp"><i></i><i></i></div><span>compute-bound<br>first token only</span></div>
     <div class="fabric"><span class="kvpkt"><i class="k">K</i><i class="v">V</i></span><span class="tag" data-step="1">KV copied over RDMA, by NIXL</span></div>
     <div class="pool cool"><span class="badge">picked first · cached prefix stays here</span><span class="tag">decode pod</span><div class="gp"><i></i><i></i></div><span class="cpre">cached prefix</span><span>memory-bound<br>streams tokens</span><div class="drip"><i></i><i></i><i></i></div></div>
   </div>
-  <p class="plain center" data-step="1">RDMA: direct GPU-memory copies over the network. NIXL: the library that moves the KV between GPUs.</p>
   <p class="say" data-step="1">The picker chooses the decode pod first, and adds a prefill pod <b>only when much of the prompt is uncached</b>.</p>
-  <p class="foot">Schematic. llm-d prefill/decode (P/D) docs: for 10k input tokens / 1k output tokens, not 200 input / 200 output. Standard-network fallback is for testing only. Splitwise arXiv:2311.18677 · DistServe arXiv:2401.09670.</p>
+  <p class="foot">Schematic. llm-d prefill/decode (P/D) docs: suited to about 10k in / 1k out, not 200 in / 200 out. Standard-network fallback is for testing only. Splitwise arXiv:2311.18677 · DistServe arXiv:2401.09670.</p>
   <aside class="notes">
-    <p>If long prompts still disrupt decode <strong>after tuning chunked prefill</strong>, we can give prefill its own pods. llm-d chooses the decode pod first. If enough of the prefix is cached there, the request stays there.</p>
-    <p>[click] If much is uncached, a prefill pod processes the prompt. NIXL, the transfer library, moves the KV directly between GPU memories over an RDMA network. Decode then streams the answer. This can help strict first-token targets, but <strong>costs GPUs and transfer time</strong>. The ordinary-network fallback is for testing.</p>
+    <p>Once chunked prefill is tuned, <strong>disaggregated prefill and decode</strong> can give long prompts their own pods. llm-d chooses the decode pod first. If enough of the prefix is cached there, the request stays there.</p>
+    <p>[click] If much is uncached, a prefill pod processes the prompt. NIXL moves the KV over the RDMA path we just saw. Decode then streams the answer. This can help strict first-token targets, but <strong>costs GPUs and transfer time</strong>. The ordinary-network fallback is for testing.</p>
   </aside>
 </section>
 
@@ -870,20 +921,20 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </aside>
 </section>
 
-<section class="slide" data-move="6" data-seconds="75" data-coach="Checkpoint: 30:00. Walk the one-point quality-loss example. Uncertain means keep the baseline; do not rush this gate.">
+<section class="slide" data-move="6" data-seconds="75" data-coach="Checkpoint: 30:25. Walk the one-point quality-loss example. Uncertain means keep the baseline; do not rush this gate.">
   <p class="kicker">Close · governance: the eval recipe</p>
-  <h2>The eval recipe: one change, same traffic, judged on a repeat.</h2>
+  <h2>The eval recipe: change one thing, repeat both setups.</h2>
   <div class="stage recipe">
     <div class="rs" data-step="0"><span class="n">1</span><b>Freeze</b><span>Save prompts, checks and setup. Set the quality-loss budget. Change <em>one</em> thing.</span></div>
     <div class="rs" data-step="1"><span class="n">2</span><b>Repeat both</b><span>Repeat baseline and candidate. Match traffic, warm-up and cache state, including persistent tiers.</span></div>
     <div class="rs" data-step="2"><span class="n">3</span><b>Compare paired cases</b><span>Pair the same cases and seeds. Score the exam and your task separately, with uncertainty intervals.</span></div>
-    <div class="rs rv" data-step="3"><span class="n">4</span><b>Verdict</b><span><span class="vr"><i class="v-keep">keep</i><span>repeatable gain <b>and</b> quality interval within budget</span></span><span class="vr"><i class="v-none">revert</i><span>no repeatable gain</span></span><span class="vr"><i class="v-none">revert</i><span>quality loss clearly exceeds budget</span></span><span class="vr"><i class="v-none">hold</i><span>uncertain: keep baseline, gather evidence</span></span></span></div>
+    <div class="rs rv" data-step="3"><span class="n">4</span><b>Verdict</b><span><span class="vr"><i class="v-keep">keep</i><span>repeatable gain <b>and</b> quality within budget<br>e.g. −0.6 to +0.2 against −1</span></span><span class="vr"><i class="v-none">revert</i><span>no repeatable gain</span></span><span class="vr"><i class="v-none">revert</i><span>quality loss clearly exceeds budget</span></span><span class="vr"><i class="v-none">hold</i><span>uncertain: keep baseline, gather evidence</span></span></span></div>
   </div>
   <aside class="notes">
-    <p>Our small coding check found differences, so <strong>quality is still a gate</strong>. Freeze prompts, checks and setup. Decide how much loss you'll accept before seeing results; the handout includes our failures.</p>
+    <p>On twelve short Python tasks, bf16 passed eleven; quantized settings passed nine or ten. That small check leaves the quality question open. <strong>Freeze the setup and loss budget</strong> before testing; the handout explains the checks.</p>
     <p>[click] Run both the baseline and candidate again, with <strong>matched traffic and cache state</strong>. Two runs check repeatability, not the range of random variation. Clear persistent caches too for cold-cache tests.</p>
-    <p>[click] Score the knowledge exam and your own tasks separately. Compare the same cases, with matched seeds across repeated sampled runs. Estimate an uncertainty interval for the score change: candidate minus baseline.</p>
-    <p>[click] Say you allow one percentage point of loss. Minus zero point six to plus zero point two passes: even the lower end is acceptable. [pause 3s: let the interval example land] An interval crossing minus one is inconclusive. Keep a repeatable speed or cost gain only within your latency and quality limits. If quality clearly fails, revert. If it's uncertain, <strong>keep the baseline</strong> and gather more evidence.</p>
+    <p>[click] Score the knowledge exam and your own tasks separately. Compare the same cases, with matched seeds for sampled runs. Estimate an uncertainty interval: candidate minus baseline.</p>
+    <p>[click] Say you allow one percentage point of loss. Minus zero point six to plus zero point two passes: even the lower end is acceptable. [pause 3s: let the interval example land] An interval crossing minus one is inconclusive. Keep repeatable gains only within your latency and quality limits. If quality clearly fails, revert. If it's uncertain, <strong>keep the baseline</strong> and gather more evidence.</p>
   </aside>
 </section>
 
@@ -891,7 +942,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   <p class="kicker">Close · the order</p>
   <h2>Measure first. Then pull the levers your traffic needs.</h2>
   <div class="stage order2">
-    <div class="ohead" data-step="0"><b>For decode. Estimate the ceiling, then one-user MBU.</b><span>Short context, speculation off. Low MBU: profile overhead. Batch within the latency target; a <span class="mono">guidellm</span> sweep finds the knee.</span></div>
+    <div class="ohead" data-step="0"><b>For decode. Estimate the ceiling, then one-user MBU.</b><span>Short context, speculation off. Low MBU: profile overhead. Batch within the latency target. GuideLLM, a vLLM subproject, runs load sweeps and reports latency and throughput.</span></div>
     <div class="orow g" data-step="1"><b><i></i>Repeated prefixes</b><span>Prefix cache (on by default). Then route to it.</span></div>
     <div class="orow s" data-step="2"><b><i></i>Weights dominate</b><span>FP8 where the GPU has FP8 math (an FP8 checkpoint, or <span class="mono nw">--quantization fp8_per_tensor</span>); NVFP4 where it has FP4 math (Blackwell).</span></div>
     <div class="orow v" data-step="3"><b><i></i>Context dominates</b><span><span class="mono">--kv-cache-dtype fp8</span>. Then fewer bits, carefully.</span></div>
@@ -899,9 +950,9 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
     <div class="orow a" data-step="5"><b><i></i>Long prompts, strict TTFT</b><span><span class="mono">--max-num-batched-tokens</span> first. A prefill/decode split needs RDMA.</span></div>
     <div class="ostop" data-step="6"><b>Keep only repeatable gains after the quality gate passes.</b><span>High MBU, batching plateaued, nothing above applies: stop. No sampler, CUDA graph or sequence-limit tweak shrinks the read.</span></div>
   </div>
-  <p class="foot">vLLM v0.31.0 commands and pinned tool versions: field guide.</p>
+  <p class="foot">vLLM 0.31.0 commands and pinned tool versions: field guide. GuideLLM: github.com/vllm-project/guidellm.</p>
   <aside class="notes">
-    <p>Here's your decision sheet. Estimate the ceiling and measure one-user, short-context MBU. If it's low, profile overhead. Batch <strong>within your latency target</strong>.</p>
+    <p>Measure one-user MBU; profile if it's low. Batch <strong>within your latency target</strong>. vLLM's GuideLLM subproject automates load sweeps and reports.</p>
     <p>[click] Repeated prefixes? Cache them, then route to them.</p>
     <p>[click] Weights dominate? Try FP8, or NVFP4 on hardware with FP4 math.</p>
     <p>[click] Context dominates? Start with FP8 KV, then consider fewer bits carefully.</p>
@@ -911,7 +962,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </aside>
 </section>
 
-<section class="slide title end" data-move="6" data-seconds="38" data-coach="Finish by 33:00 (14:28 SGT). Name both QR codes, then allow eight seconds for scanning and leave this slide visible. No Q&amp;A segment; hard stop 14:30.">
+<section class="slide title end" data-move="6" data-seconds="38" data-coach="Finish by 33:25 (14:28:25 SGT). Name both QR codes, then allow eight seconds for scanning and leave this slide visible. No Q&amp;A segment; hard stop 14:30.">
   <img class="guideshot" src="img/field-guide-cover.webp" width="520" height="736" alt="Cover of the field guide handout">
   <div class="closing-links">
     <div class="qrcard"><b>Handout</b><svg class="qr" viewBox="0 0 33 33" role="img" aria-label="QR code to linkedin.com/in/marcel-w-wysocki"><path transform="translate(0,0.5)" d="M0,0h1M1,0h1M2,0h1M3,0h1M4,0h1M5,0h1M6,0h1M9,0h1M12,0h1M16,0h1M18,0h1M19,0h1M20,0h1M23,0h1M26,0h1M27,0h1M28,0h1M29,0h1M30,0h1M31,0h1M32,0h1M0,1h1M6,1h1M11,1h1M15,1h1M16,1h1M18,1h1M22,1h1M24,1h1M26,1h1M32,1h1M0,2h1M2,2h1M3,2h1M4,2h1M6,2h1M8,2h1M10,2h1M14,2h1M15,2h1M16,2h1M19,2h1M20,2h1M21,2h1M22,2h1M26,2h1M28,2h1M29,2h1M30,2h1M32,2h1M0,3h1M2,3h1M3,3h1M4,3h1M6,3h1M8,3h1M11,3h1M18,3h1M19,3h1M21,3h1M23,3h1M24,3h1M26,3h1M28,3h1M29,3h1M30,3h1M32,3h1M0,4h1M2,4h1M3,4h1M4,4h1M6,4h1M8,4h1M11,4h1M12,4h1M14,4h1M15,4h1M16,4h1M20,4h1M23,4h1M24,4h1M26,4h1M28,4h1M29,4h1M30,4h1M32,4h1M0,5h1M6,5h1M8,5h1M10,5h1M11,5h1M12,5h1M17,5h1M18,5h1M19,5h1M21,5h1M26,5h1M32,5h1M0,6h1M1,6h1M2,6h1M3,6h1M4,6h1M5,6h1M6,6h1M8,6h1M10,6h1M12,6h1M14,6h1M16,6h1M18,6h1M20,6h1M22,6h1M24,6h1M26,6h1M27,6h1M28,6h1M29,6h1M30,6h1M31,6h1M32,6h1M8,7h1M14,7h1M16,7h1M19,7h1M20,7h1M21,7h1M22,7h1M24,7h1M0,8h1M2,8h1M3,8h1M4,8h1M5,8h1M6,8h1M9,8h1M10,8h1M12,8h1M13,8h1M14,8h1M17,8h1M19,8h1M22,8h1M23,8h1M24,8h1M26,8h1M27,8h1M28,8h1M29,8h1M30,8h1M0,9h1M1,9h1M3,9h1M4,9h1M5,9h1M8,9h1M9,9h1M12,9h1M13,9h1M14,9h1M16,9h1M17,9h1M18,9h1M19,9h1M23,9h1M26,9h1M27,9h1M29,9h1M30,9h1M32,9h1M2,10h1M3,10h1M6,10h1M7,10h1M9,10h1M13,10h1M14,10h1M15,10h1M16,10h1M17,10h1M22,10h1M24,10h1M26,10h1M28,10h1M30,10h1M31,10h1M0,11h1M1,11h1M2,11h1M4,11h1M9,11h1M10,11h1M13,11h1M16,11h1M17,11h1M18,11h1M19,11h1M20,11h1M23,11h1M25,11h1M28,11h1M29,11h1M30,11h1M31,11h1M0,12h1M1,12h1M2,12h1M6,12h1M10,12h1M14,12h1M16,12h1M19,12h1M20,12h1M21,12h1M22,12h1M23,12h1M24,12h1M25,12h1M28,12h1M29,12h1M31,12h1M0,13h1M1,13h1M2,13h1M3,13h1M4,13h1M5,13h1M7,13h1M8,13h1M10,13h1M13,13h1M15,13h1M17,13h1M18,13h1M23,13h1M25,13h1M26,13h1M29,13h1M31,13h1M32,13h1M0,14h1M5,14h1M6,14h1M8,14h1M10,14h1M11,14h1M12,14h1M14,14h1M15,14h1M16,14h1M17,14h1M20,14h1M22,14h1M25,14h1M26,14h1M28,14h1M30,14h1M31,14h1M5,15h1M7,15h1M11,15h1M13,15h1M14,15h1M15,15h1M21,15h1M23,15h1M24,15h1M25,15h1M26,15h1M30,15h1M0,16h1M1,16h1M4,16h1M5,16h1M6,16h1M7,16h1M8,16h1M11,16h1M12,16h1M14,16h1M15,16h1M17,16h1M22,16h1M23,16h1M24,16h1M25,16h1M27,16h1M28,16h1M32,16h1M1,17h1M2,17h1M5,17h1M8,17h1M9,17h1M10,17h1M12,17h1M14,17h1M18,17h1M19,17h1M20,17h1M21,17h1M23,17h1M24,17h1M25,17h1M26,17h1M27,17h1M29,17h1M30,17h1M32,17h1M0,18h1M1,18h1M3,18h1M6,18h1M7,18h1M12,18h1M15,18h1M18,18h1M20,18h1M21,18h1M27,18h1M28,18h1M30,18h1M31,18h1M0,19h1M2,19h1M4,19h1M5,19h1M7,19h1M8,19h1M12,19h1M13,19h1M14,19h1M16,19h1M21,19h1M22,19h1M23,19h1M25,19h1M26,19h1M27,19h1M28,19h1M29,19h1M30,19h1M31,19h1M32,19h1M0,20h1M2,20h1M3,20h1M5,20h1M6,20h1M8,20h1M9,20h1M11,20h1M12,20h1M13,20h1M18,20h1M19,20h1M21,20h1M24,20h1M25,20h1M28,20h1M29,20h1M0,21h1M2,21h1M3,21h1M4,21h1M9,21h1M12,21h1M13,21h1M15,21h1M16,21h1M17,21h1M20,21h1M22,21h1M23,21h1M26,21h1M29,21h1M32,21h1M0,22h1M2,22h1M3,22h1M6,22h1M8,22h1M11,22h1M12,22h1M13,22h1M14,22h1M19,22h1M25,22h1M29,22h1M30,22h1M31,22h1M0,23h1M2,23h1M4,23h1M5,23h1M7,23h1M9,23h1M11,23h1M12,23h1M14,23h1M16,23h1M19,23h1M20,23h1M21,23h1M22,23h1M23,23h1M24,23h1M25,23h1M26,23h1M28,23h1M29,23h1M30,23h1M31,23h1M0,24h1M2,24h1M3,24h1M5,24h1M6,24h1M8,24h1M9,24h1M10,24h1M11,24h1M13,24h1M14,24h1M17,24h1M18,24h1M19,24h1M22,24h1M24,24h1M25,24h1M26,24h1M27,24h1M28,24h1M29,24h1M31,24h1M32,24h1M8,25h1M10,25h1M12,25h1M14,25h1M16,25h1M17,25h1M18,25h1M19,25h1M20,25h1M23,25h1M24,25h1M28,25h1M30,25h1M32,25h1M0,26h1M1,26h1M2,26h1M3,26h1M4,26h1M5,26h1M6,26h1M9,26h1M11,26h1M14,26h1M15,26h1M16,26h1M17,26h1M22,26h1M23,26h1M24,26h1M26,26h1M28,26h1M30,26h1M31,26h1M0,27h1M6,27h1M8,27h1M9,27h1M12,27h1M15,27h1M17,27h1M18,27h1M20,27h1M23,27h1M24,27h1M28,27h1M29,27h1M30,27h1M32,27h1M0,28h1M2,28h1M3,28h1M4,28h1M6,28h1M8,28h1M11,28h1M12,28h1M14,28h1M16,28h1M20,28h1M21,28h1M22,28h1M24,28h1M25,28h1M26,28h1M27,28h1M28,28h1M29,28h1M0,29h1M2,29h1M3,29h1M4,29h1M6,29h1M8,29h1M12,29h1M14,29h1M15,29h1M17,29h1M18,29h1M21,29h1M23,29h1M25,29h1M28,29h1M29,29h1M30,29h1M32,29h1M0,30h1M2,30h1M3,30h1M4,30h1M6,30h1M8,30h1M10,30h1M13,30h1M14,30h1M15,30h1M16,30h1M17,30h1M20,30h1M21,30h1M22,30h1M23,30h1M24,30h1M25,30h1M26,30h1M27,30h1M29,30h1M0,31h1M6,31h1M10,31h1M13,31h1M14,31h1M15,31h1M21,31h1M22,31h1M25,31h1M26,31h1M28,31h1M30,31h1M0,32h1M1,32h1M2,32h1M3,32h1M4,32h1M5,32h1M6,32h1M8,32h1M13,32h1M15,32h1M17,32h1M22,32h1M23,32h1M24,32h1M25,32h1M26,32h1M27,32h1M31,32h1"/></svg><span>Run the field experiment yourself</span><span>Message “guide” on LinkedIn</span></div>
@@ -919,10 +970,10 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </div>
   <h1>Your GPU isn't slow.<br><span class="steel">It's starving.</span></h1>
   <p class="eq stack">Skip repeated work.<br>Min the bytes.<br>Max the tokens per read.</p>
-  <p class="eq small">tok/s × bytes = <span class="steel">bandwidth</span></p>
+  <p class="eq small"><span class="steel">bandwidth</span> ÷ bytes per token = tok/s</p>
   <p class="byline"><b>Marcel Wysocki</b> · marcel.w.wysocki@gmail.com</p>
   <aside class="notes">
-    <p>Tomorrow, take <strong>one model on one GPU</strong>. Estimate the ceiling, measure MBU, apply the levers. Skip repeated work, min the bytes, max the tokens per read. Your GPU isn't slow. <strong>It's starving.</strong> [beat] Thank you. Scan the LinkedIn QR and message <strong>"guide"</strong> for the experiment. The other QR is conference feedback. Tell us what helped and what was missing. [pause 8s: smile and leave both QR codes visible]</p>
+    <p>Tomorrow, take <strong>one model on one GPU</strong>. Estimate the ceiling, measure MBU, apply the levers. Skip repeated work, min the bytes, max the tokens per read. Your GPU isn't slow. <strong>It's starving.</strong> [beat] Thank you. Scan the LinkedIn QR and message <strong>"guide"</strong> for the handout. The other QR is conference feedback. Tell us what helped and what was missing. [pause 8s: smile and leave both QR codes visible]</p>
   </aside>
 </section>
 
@@ -950,7 +1001,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </div>
   <p class="foot">DeepSeek V4-Pro API, off-peak · checked 25 Oct 2026 · api-docs.deepseek.com/quick_start/pricing · work strips schematic.</p>
   <aside class="notes">
-    <p>Here's a <strong>historical pricing example</strong>. DeepSeek charged sixty-six cents per million new input tokens at its off-peak rate.</p>
+    <p>Here's a <strong>pricing snapshot</strong> from October twenty-fifth. DeepSeek charged sixty-six cents per million new input tokens at its off-peak rate.</p>
     <p>[click] The same model, with those tokens already cached, cost two point two cents per million. [beat]</p>
     <p>[click] Thirty times cheaper. The cache hit skips repeated prefill work, which is why prefix reuse can matter so much. That price ratio <strong>isn't a measured hardware speedup</strong>.</p>
   </aside>
@@ -976,9 +1027,9 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
 
 <section class="slide backup" data-move="3">
   <p class="kicker">Backup · what does not work</p>
-  <h2>These flags can't move a bandwidth-bound decode.</h2>
+  <h2>These flags don't shrink the weight read.</h2>
   <div class="stage strikes">
-    <div class="sk" data-step="0"><b>Sampler settings</b><span>Sampler settings don't shrink the weight read.</span></div>
+    <div class="sk" data-step="0"><b>Sampler settings</b><span>Change which token is chosen.</span></div>
     <div class="sk" data-step="1"><b>CUDA graph tweaks at high MBU</b><span>Launch overhead was the low-MBU problem.</span></div>
     <div class="sk" data-step="2"><b>More <span class="mono">--max-num-seqs</span> after throughput plateaus</b><span>Extra sequences still need KV room.</span></div>
   </div>
@@ -1027,9 +1078,9 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
     <div class="zb mha"><b>plain multi-head</b><span>128 K and V heads · DeepSeek-V3 shape</span><div class="b"><i></i><em class="off">off the chart</em></div><strong>4.77 MiB</strong></div>
     <div class="zb gqa" data-step="1"><b>GQA</b><span>24 query heads share 4 KV heads · Qwen3.8-27B, 16 attention layers</span><div class="b"><i></i></div><strong>64 KiB</strong></div>
     <div class="zb mlab" data-step="2"><b>MLA</b><span>compressed vector + key positions · <span class="nw">DeepSeek-V3</span></span><div class="b"><i></i></div><strong class="green">68.6 KiB</strong></div>
-    <div class="latent" data-step="3"><span class="tag">DeepSeek's FP8 cache, one layer: 656 B (512 FP8 + 16 scales + 128 RoPE) instead of 1,152 B</span><div class="lseg"><i class="v" style="--w:512"><span>512 latent values · FP8</span></i><i class="s" style="--w:16" title="scales"></i><i class="r" style="--w:128"><span>RoPE (position) · keys · bf16</span></i></div></div>
+    <div class="latent" data-step="3"><span class="tag">DeepSeek's FP8 cache, one layer: 656 B (512 FP8 + 16 scales + 128 RoPE) instead of 1,152 B</span><div class="lseg"><i class="v" style="--w:512"><span>512 latent values · FP8</span></i><i class="s" style="--w:16" title="scales"></i><i class="r" style="--w:128"><span>RoPE keys · bf16</span></i></div></div>
   </div>
-  <p class="foot">DeepSeek-V3 config: kv_lora_rank 512, qk_rope_head_dim 64, 61 layers; plain multi-head = 128 × (192 + 128) × 2 B × 61. Qwen3.8-27B config: 16 × 4 KV heads × 256 × 2 × 2 B = 64 KiB; 146.8 MiB fixed DeltaNet state extra. vLLM v0.31.0 fp8_ds_mla layout (V3.2).</p>
+  <p class="foot">DeepSeek-V3 config: kv_lora_rank 512, qk_rope_head_dim 64, 61 layers; plain multi-head = 128 × (192 + 128) × 2 B × 61. Qwen3.8-27B config: 16 × 4 KV heads × 256 × 2 × 2 B = 64 KiB; 146.8 MiB fixed DeltaNet state extra. vLLM 0.31.0 fp8_ds_mla layout (V3.2).</p>
   <aside class="notes">
     <p>Cache size also depends on <strong>model architecture</strong>. Plain multi-head attention keeps a separate key and value for each head. With DeepSeek V3's dimensions, that would take almost five megabytes per token.</p>
     <p>[click] Grouped-query attention, or GQA, lets heads share keys and values. Qwen three point eight has twenty-four query heads sharing four key-value heads in sixteen attention layers: sixty-four kilobytes of growing cache per token, plus <strong>fixed state</strong> for its other layers. The axis zooms about thirteen times here.</p>
@@ -1056,7 +1107,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
       <div class="kb"><b>DeepSeek-V4-Pro · CSA + HCA</b><div class="b"><i style="--w:7.68%; --d:.3s"></i></div><em>≈ 5,031 B</em></div>
       <div class="kb"><b>DeepSeek-V4-Flash</b><div class="b"><i style="--w:5.36%; --d:.45s"></i></div><em>3,514 B</em></div>
       <div class="kb hi"><b>DeepSeek-V4.1-Flash · CSA2</b><div class="b"><i style="--w:1.36%; --d:.6s"></i></div><em>890 B</em></div>
-      <p class="cnote">CSA2: layers share entries and picks, no HCA, FP4 cache. 74× less than Qwen3.8-27B’s growing KV.</p>
+      <p class="cnote">CSA2: layers share entries and picks, no HCA, FP4 cache. 74× less than Qwen3.8-27B's growing KV.</p>
     </div>
   </div>
   <p class="foot">Token rows schematic. DeepSeek-V4 report, arXiv:2606.19348 · V4.1-Flash report, Fig. 1b. V4-Pro computed from config (MXFP4 indexer; FP8: about 5,511 B). Qwen3.8-27B bf16: 16 full-attention layers; fixed DeltaNet state excluded.</p>
@@ -1131,8 +1182,8 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   <div class="stage paths">
     <div class="path" data-step="0"><b>Optimized baseline</b><span>Envoy + Endpoint Picker + vLLM pods</span><em>start here · any fleet</em></div>
     <div class="path" data-step="1"><b>Tiered prefix cache</b><span>HBM → CPU memory → storage</span><em>big shared prefixes</em></div>
-    <div class="path" data-step="2"><b>P/D disaggregation</b><span>prefill pods → KV over NIXL (GPU-to-GPU transfer) <span class="nw">→ decode pods</span></span><em>long prompts, strict TTFT, RDMA</em></div>
-    <div class="path" data-step="2" style="--d:.15s"><b>Wide expert parallel</b><span>16 prefill + 16 decode B200: ≈ 3.1k output tok/s per decode GPU</span><em>DeepSeek-class MoE · batch processing, relaxed latency</em></div>
+    <div class="path" data-step="2"><b>P/D disaggregation</b><span>prefill pods → KV over NIXL (<span class="nw">GPU-to-GPU</span> transfer) <span class="nw">→ decode pods</span></span><em>long prompts, strict TTFT, RDMA</em></div>
+    <div class="path" data-step="2" style="--d:.15s"><b>Wide expert parallel</b><span>16 prefill + 16 decode B200: <span class="nw">≈ 3.1k</span> output tok/s per decode GPU</span><em>DeepSeek-class MoE · batch processing, relaxed latency</em></div>
     <p class="say" data-step="3">Scale on active requests and queues, not GPU utilization: <span class="steel">busy and overloaded look the same.</span></p>
   </div>
   <p class="foot">llm-d "well-lit path" guides. Wide-EP: llm-d v0.5 blog, random 1k/1k. Autoscaling: KEDA on Endpoint Picker metrics.</p>
@@ -1177,7 +1228,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </div>
   <p class="foot">Lin et al., arXiv:2405.04532: maximum throughput, 1,024 in / 512 out, same memory per device, against the best TensorRT-LLM v0.9.0 configuration (FP16, W8A8 or W4A16). Whole-system comparison.</p>
   <aside class="notes">
-    <p>The QServe results show why execution matters as much as bit count. In its large-batch serving tests, existing four-bit integer methods paid twenty to ninety percent extra runtime converting stored weights back into values the GPU could compute with.</p>
+    <p>The QServe results show why execution matters as much as bit count. In its large-batch serving tests, existing four-bit integer methods paid twenty to ninety percent extra runtime converting stored weights or partial sums back into values the GPU could compute with.</p>
     <p>[click] QServe designed the format, kernels and serving system together. With matched memory per device, maximum throughput reached three and a half times the best TensorRT-LLM zero point nine configuration. That's a <strong>whole-system gain</strong>. In their separate cross-GPU comparison, QServe on L40S beat TensorRT-LLM on A100 for Llama-3 8B, <strong>but not Qwen1.5 72B</strong>. For our vLLM deployment, the question is whether its kernels run the chosen format <strong>efficiently on our hardware</strong>.</p>
   </aside>
 </section>
@@ -1218,19 +1269,18 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
     <div class="pv-notes" id="pv-notes" tabindex="0" role="region" aria-label="Script for the current slide"></div>
   </div>
   <aside class="pv-side" aria-label="Slide previews and pacing">
+    <div class="pv-clock">
+      <div><span>Talk elapsed</span><div class="pv-gauge"><svg viewBox="0 0 100 100" aria-hidden="true"><circle class="pv-track" cx="50" cy="50" r="43"/><path id="pv-progress" d="M93 50 A43 43 0 1 1 7 50 A43 43 0 1 1 93 50" pathLength="2100"/><circle class="pv-deck-track" cx="50" cy="50" r="34" pathLength="2100"/><circle id="pv-slide-window" cx="50" cy="50" r="34" pathLength="2100"/><path class="pv-target" d="M32.8 4.9 L36.4 14.5"/></svg><b id="pv-time" role="timer" aria-label="Elapsed presentation time">00:00</b></div></div>
+      <div class="pv-clock-controls"><button type="button" id="pv-clock-toggle">Start timer</button><button type="button" id="pv-reset">Reset timer</button></div>
+      <div class="pv-clock-copy"><b id="pv-slide-range"></b><strong id="pv-pace-state"></strong><span id="pv-plan"></span></div>
+      <span class="pv-limit">33:25 target · 35 min hard stop</span>
+    </div>
     <div class="pv-now"><h2>On screen</h2><iframe id="pv-cur" title="current slide"></iframe></div>
     <div class="pv-next"><h2>Next step</h2><iframe id="pv-nxt" title="next step"></iframe></div>
-    <div class="pv-clock"><div><span>Elapsed</span><div class="pv-gauge"><svg viewBox="0 0 100 100" aria-hidden="true"><circle class="pv-track" cx="50" cy="50" r="43"/><path id="pv-progress" d="M93 50 A43 43 0 1 1 7 50 A43 43 0 1 1 93 50" pathLength="2100"/><path class="pv-target" d="M32.8 4.9 L36.4 14.5"/></svg><b id="pv-time" role="timer" aria-label="Elapsed presentation time">00:00</b></div></div><button type="button" id="pv-reset">Reset timer</button><span class="pv-limit">33 min target · 35 min limit</span><span id="pv-plan"></span></div>
     <details class="pv-pacing" open>
       <summary>Live pacing targets</summary>
-      <dl>
-        <div><dt>15 · Four levers</dt><dd>12:30</dd></div>
-        <div><dt>26 · Speculative decoding</dt><dd>22:30</dd></div>
-        <div><dt>29 · Fleet</dt><dd>25:30</dd></div>
-        <div><dt>34 · Eval recipe</dt><dd>30:00</dd></div>
-        <div><dt>36 · Finish</dt><dd>33:00</dd></div>
-      </dl>
-      <p>13:55 start · finish by 14:28 · hard stop 14:30 SGT. No Q&amp;A. Reset the timer when you start speaking.</p>
+      <dl id="pv-checkpoints"></dl>
+      <p>13:55 start · finish by 14:28:25 · hard stop 14:30 SGT. No Q&amp;A. Start the timer when you begin speaking. Highlighting has its own pause control.</p>
     </details>
   </aside>
   <footer class="pv-footer"><span id="pv-status" role="status">Open the presentation and move it to your audience display.</span><span>Arrows: step · Shift + arrows: slide · H: highlighting · T: reset timer · D: theme</span></footer>

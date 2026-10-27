@@ -59,6 +59,7 @@
 html,body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--text); }
 body.show,body.embed { height:100vh; overflow:hidden; }
 body.blank #deck { opacity:0; }
+body.motion-paused .slide *, body.motion-paused .slide *::before, body.motion-paused .slide *::after { animation-play-state:paused !important; }
 #deck { position:absolute; left:0; top:0; width:1280px; height:720px; transform-origin:0 0; transition:opacity .3s; }
 
 .slide {
@@ -227,21 +228,20 @@ svg [data-step] { transform-box:fill-box; }
 .hbm { display:flex; flex-direction:column; justify-content:center; padding-bottom:40px; }
 .hbmbar { display:flex; height:150px; border:1px solid var(--line); border-radius:14px; overflow:hidden; }
 .hbmbar .seg { position:relative; display:flex; align-items:center; justify-content:center; text-align:center; font-size:17px; color:var(--fill-ink); }
-.seg.w { width:65%; background:var(--steel-fill); font-weight:500; } .seg.w b { font-family:var(--display); font-size:26px; }
-.seg.rt { width:5%; background:var(--c-stub); } .seg.rt span { writing-mode:vertical-rl; transform:rotate(180deg); font-size:15px; }
-.seg.kvarea { width:22%; background:var(--surface-2); } .seg.kvarea > span { font-size:17px; font-weight:600; }
-.seg.rsv { width:8%; color:var(--mute); border-left:1px dashed var(--line); font-size:14px; }
+.seg.w { width:60.7493%; background:var(--steel-fill); font-weight:500; } .seg.w b { font-family:var(--display); font-size:26px; }
+.seg.rt { width:4.6959%; background:var(--c-stub); } .seg.rt span { writing-mode:vertical-rl; transform:rotate(180deg); font-size:15px; }
+.seg.kvarea { width:34.5548%; background:var(--surface-2); } .seg.kvarea > span { font-size:17px; font-weight:600; }
 .kvfill { position:absolute; inset:6px; display:flex; flex-wrap:wrap; gap:4px; align-content:stretch; }
-.kvfill.short i { width:calc((100% - 52px)/14); height:calc(50% - 2px); }
+.kvfill.short i { width:calc((100% - 56px)/15); height:calc((100% - 8px)/3); }
 /* 128k blocks to scale (deck.js PLAY.fit sets --w0, the 8k size, and --w1, the 128k size, in % of the budget); they grow with the context */
-.kvfill.long i { flex:none; width:calc(var(--w1, 46.5) * 1% - 2px); height:100%; transform-origin:left; transform:scaleX(calc(var(--w0, 46.5) / var(--w1, 46.5))); transition:transform var(--bar) var(--ease) var(--dd, 0s); }
+.kvfill.long i { flex:none; width:calc(var(--w1, 27.67) * 1% - 2px); height:100%; transform-origin:left; transform:scaleX(calc(var(--w0, 2.19) / var(--w1, 27.67))); transition:transform var(--bar) var(--ease) var(--dd, 0s); }
 .kvfill.long.on i { transform:none; }
 .kvfill i { border-radius:5px; border:1px solid var(--violet); }
 /* one cell per conversation, popping in as the count climbs (--pop from deck.js) */
 .kvfill.short.on i { animation:popin .5s var(--ease) backwards; animation-delay:calc(var(--i, 0) * var(--pop, 33ms)); }
 .hbm-legend { margin-top:12px; }
 .fitcount { display:flex; align-items:baseline; gap:24px; margin-top:44px; }
-.fitcount .huge { font-size:120px; min-width:170px; text-align:right; }
+.fitcount .huge { font-size:96px; }
 .ctxlbl { font-size:26px; color:var(--soft); }
 
 /* ── KV math ── */
@@ -480,10 +480,9 @@ svg [data-step] { transform-box:fill-box; }
 .kvq { display:flex; flex-direction:column; gap:26px; padding-top:20px; }
 .kvslots { position:relative; height:110px; border:1px solid var(--line); border-radius:14px; }
 .blk { position:absolute; inset:8px; display:flex; gap:8px; }
-/* same budget, half-size blocks: two bf16 blocks shrink from 46.5% to 23.6% (to scale: 8.14 and 4.14 of 17.5 GiB free),
-   then two FP8 blocks pop into the room they freed */
-.blk i { flex:none; width:calc(46.5% - 4px); border-radius:5px; border:1px solid var(--violet); } /* sizes switch at the click; the FP8 blocks' pop-in carries the motion */
-.slide.k1 .blk i { width:calc(23.6% - 6px); }
+/* Same 29.4343 GiB budget: three 8.14 GiB blocks shrink to 4.14 GiB; four more then fit. */
+.blk i { flex:none; width:calc(27.67% - 6px); border-radius:5px; border:1px solid var(--violet); } /* sizes switch at the click; the FP8 blocks' pop-in carries the motion */
+.slide.k1 .blk i { width:calc(14.08% - 7px); }
 .slide:not(.k1) .blk i[data-step] { display:none; }
 .blk i[data-step].on { animation:popin .5s var(--ease) var(--dd, 0s) backwards; }
 .fitcount2 { display:flex; align-items:baseline; gap:24px; } .fitcount2 .huge { font-size:96px; color:var(--ink); transition:color .4s ease; } .slide.k1 .fitcount2 .huge { color:var(--green); transition-delay:1.7s; }
@@ -546,9 +545,9 @@ svg [data-step] { transform-box:fill-box; }
 .am { margin-left:auto; width:220px; height:20px; border-radius:5px; background:var(--track); overflow:hidden; }
 .am i { display:block; height:100%; width:100%; background:var(--green-fill); transform-origin:left; transform:scaleX(0); transition:transform var(--bar) var(--ease) .3s; }
 .arow.on .am i { transform:scaleX(calc(var(--w) / 100)); } /* grows when its row appears */
-.picks { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:0; }
-.picks div { border:1px solid var(--line); border-radius:16px; padding:18px 20px; display:flex; flex-direction:column; gap:8px; }
-.picks .cool { border-color:var(--green); } .picks .hot { border-color:var(--steel); }
+.picks { display:grid; grid-template-columns:repeat(2,1fr); gap:18px; margin-top:0; }
+.picks div { border:1px solid var(--line); border-radius:16px; padding:12px 20px; display:flex; flex-direction:column; gap:8px; }
+.picks .cool { border-color:var(--green); } .picks .hot { grid-column:1 / -1; flex-direction:row; align-items:baseline; gap:8px; padding:0; border:0; }
 .picks > div > b { font-family:var(--display); font-size:25px; } .picks .hot > b { color:var(--steel); } .picks span { color:var(--soft); font-size:19px; }
 
 /* ── strikes ── */
@@ -730,11 +729,11 @@ body.presenter { background:var(--bg); height:100vh; overflow:hidden; }
 .pv-notes p.done { color:var(--mute); }
 .pv-notes strong { font-weight:900; color:var(--amber); text-decoration:underline; text-decoration-thickness:.065em; text-underline-offset:.16em; }
 .pv-notes p.done strong { color:inherit; }
-.pv-notes .pv-active { font-weight:750; color:var(--ink); background:var(--green-bg); border-radius:3px; box-decoration-break:clone; -webkit-box-decoration-break:clone; scroll-margin-block:4rem; }
+/* the highlight is paint only: a bolder sentence is wider and would rewrap the paragraph as it advances */
+.pv-notes .pv-active { color:var(--ink); background:color-mix(in srgb, var(--green) 25%, transparent); border-radius:3px; box-decoration-break:clone; -webkit-box-decoration-break:clone; scroll-margin-block:4rem; }
 .pv-sentence[role="button"] { cursor:pointer; }
 .pv-sentence[role="button"]:hover { text-decoration:underline; text-decoration-color:var(--green); text-underline-offset:.15em; }
 .pv-cue { color:var(--green); font:500 .7em var(--mono); white-space:nowrap; }
-.pv-cue.pv-active { color:var(--green); }
 .pv-pause { white-space:normal; }
 .pv-delivery { display:flex; flex-direction:column; gap:8px; padding-bottom:20px; margin-bottom:24px; border-bottom:1px solid var(--line); font-size:20px; line-height:1.4; color:var(--soft); }
 .pv-delivery b { color:var(--green); font:500 18px var(--mono); }
@@ -742,11 +741,11 @@ body.presenter { background:var(--bg); height:100vh; overflow:hidden; }
 .pv-side h2 { font-size:16px; font-weight:500; letter-spacing:0; margin:0 0 8px; }
 #presenter iframe { width:100%; aspect-ratio:16/9; border:1px solid var(--line); border-radius:10px; background:var(--bg); display:block; }
 .pv-next { width:75%; }
-.pv-clock { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding-top:16px; border-top:1px solid var(--line); color:var(--soft); font-size:14px; }
+.pv-clock { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding-bottom:16px; border-bottom:1px solid var(--line); color:var(--soft); font-size:14px; }
 .pv-clock div { display:flex; flex-direction:column; gap:2px; }
 .pv-clock b { font:500 36px var(--mono); font-variant-numeric:tabular-nums; color:var(--ink); }
 .pv-clock b.late { color:var(--steel); }
-.pv-clock .pv-gauge { position:relative; width:144px; height:144px; }
+.pv-clock .pv-gauge { position:relative; width:128px; height:128px; }
 .pv-gauge svg { width:100%; height:100%; }
 .pv-gauge circle, #pv-progress { fill:none; stroke-width:5; }
 .pv-track { stroke:var(--track); }
@@ -754,9 +753,18 @@ body.presenter { background:var(--bg); height:100vh; overflow:hidden; }
 #pv-progress.near { stroke:var(--amber); }
 #pv-progress.over { stroke:var(--fail); }
 .pv-target { fill:none; stroke:var(--ink); stroke-width:1.5; }
-.pv-clock .pv-gauge b { position:absolute; inset:0; display:grid; place-items:center; font-size:28px; }
+.pv-deck-track, #pv-slide-window { transform:rotate(-90deg); transform-origin:center; }
+.pv-gauge .pv-deck-track { stroke:var(--track); stroke-width:2; stroke-dasharray:1980 2100; }
+.pv-gauge #pv-slide-window { stroke:var(--ink); stroke-width:4; }
+.pv-clock .pv-gauge b { position:absolute; inset:0; display:grid; place-items:center; font-size:23px; }
+.pv-clock .pv-clock-controls { gap:8px; }
+.pv-clock .pv-clock-copy { flex-basis:100%; gap:6px; line-height:1.4; }
+.pv-clock #pv-slide-range { font:500 14px var(--mono); }
+#pv-slide-range::before { content:""; display:inline-block; width:14px; border-top:4px solid var(--ink); margin-right:8px; vertical-align:middle; }
+#pv-pace-state { font-size:17px; font-weight:650; color:var(--ink); }
+#pv-pace-state[data-state="behind"] { color:var(--steel); }
+#pv-pace-state[data-state="over"] { color:var(--fail); }
 .pv-limit { flex-basis:100%; }
-#pv-plan { flex-basis:100%; }
 .pv-pacing { font-size:15px; color:var(--soft); }
 .pv-pacing summary { color:var(--ink); cursor:pointer; padding:4px 0; }
 .pv-pacing dl { margin:12px 0; }
@@ -775,7 +783,11 @@ body.presenter { background:var(--bg); height:100vh; overflow:hidden; }
   #presenter { height:auto; min-height:100vh; display:flex; flex-direction:column; }
   .pv-controls { flex-shrink:1; }
   .pv-notes { overflow:visible; font-size:26px; padding-right:0; }
-  .pv-side { overflow:visible; width:100%; max-width:420px; }
+  .pv-toolbar { order:-2; }
+  .pv-side { display:contents; }
+  .pv-clock { order:-1; width:100%; max-width:420px; }
+  .pv-now, .pv-next, .pv-pacing { order:1; width:100%; max-width:420px; }
+  .pv-footer { order:2; }
 }
 
 /* ── print / export ── */
@@ -905,7 +917,7 @@ body.print *, body.print *::before, body.print *::after, body.motionless #deck,
 .ppl .pc { display:flex; flex-direction:column; gap:4px; padding:12px 20px; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
 .ppl .pc b { font-family:var(--display); font-size:44px; line-height:1; }
 .ppl .pc .tag { white-space:nowrap; } .sp > .tag { text-wrap:balance; }
-.ppl p { margin:0; font-size:20px; color:var(--soft); } .ppl p b { color:var(--ink); }
+.ppl p { margin:0; font-size:20px; color:var(--soft); } .ppl p b:not(.src) { color:var(--ink); }
 .att .b i { position:relative; z-index:1; display:block; height:100%; width:100%; border-radius:5px; background:var(--soft); transform-origin:left; transition:transform var(--bar) var(--ease); }
 .att em { font-style:normal; font-family:var(--display); font-weight:700; font-size:24px; font-variant-numeric:tabular-nums; }
 .w1 { transform:none; } .w2 { transform:scaleX(.46); } .w3 { transform:scaleX(.2); } .w4 { transform:scaleX(.34); }
@@ -948,7 +960,7 @@ body.print *, body.print *::before, body.print *::after, body.motionless #deck,
 .axis2 span { position:absolute; left:calc(var(--x) * 1%); transform:translateX(-50%); color:var(--mute); font-size:15px; white-space:nowrap; }
 .qrow { display:grid; grid-template-columns:420px 1fr 190px; align-items:center; gap:20px; }
 .ql { display:flex; flex-direction:column; gap:2px; } .ql b { font-family:var(--display); font-size:24px; } .ql span { color:var(--soft); font-size:15px; }
-.qtrack { position:relative; height:46px; border-radius:5px; background:linear-gradient(to right, color-mix(in srgb, var(--fail) 12%, var(--bg)) 0 64.2857%, var(--green-bg) 64.2857% 100%); }
+.qtrack { position:relative; height:46px; border-radius:5px; background:linear-gradient(to right, color-mix(in srgb, var(--fail) 12%, var(--bg)) 0 60.7143%, var(--green-bg) 60.7143% 100%); }
 .qtrack .zero { position:absolute; top:-6px; bottom:-6px; left:71.43%; width:2px; background:var(--ink); }
 .qtrack .qdot { position:absolute; top:11px; left:0; width:100%; height:24px; transition:transform 1.4s var(--ease) .3s; } /* carrier: the dot moves by translateX of the full track */
 .qtrack .qdot::before { content:""; position:absolute; left:calc(71.43% - 12px); top:0; width:24px; height:24px; border-radius:50%; background:var(--quality); }
@@ -957,7 +969,7 @@ body.print *, body.print *::before, body.print *::after, body.motionless #deck,
 /* the score change waits for its dot to land */
 .qrow em { transition:opacity .4s ease 1.5s; } .qrow:not(.on) em { opacity:0; transition-delay:0s; }
 .gate2 .say { margin-top:0; }
-.ruler { display:flex; flex-direction:column; gap:8px; }
+.ruler { display:flex; flex-direction:column; gap:36px; }
 .rl { position:relative; height:92px; border-bottom:1px solid var(--mute); margin:0 10px; }
 .rl .tick { position:absolute; bottom:-8px; width:3px; height:30px; margin-left:-1.5px; background:var(--steel-fill); }
 .rl .tick::after { content:attr(data-v); position:absolute; top:34px; left:50%; transform:translateX(-50%); font-family:var(--mono); font-size:15px; color:var(--soft); }
@@ -971,7 +983,7 @@ body.print *, body.print *::before, body.print *::after, body.motionless #deck,
 .slide.k2 .rl .rdot { transform:translate(var(--x1), 44px); }
 .rl .rghost { position:absolute; width:14px; height:14px; margin-left:-7px; border-radius:50%; border:1.5px dashed var(--steel); left:var(--x0); opacity:0; transition:opacity .6s .5s; }
 .slide.k2 .rl .rghost { opacity:0; }
-.fp4 { gap:14px; } .fp4-row { height:64px; }
+.fp4 { gap:14px; } .fp4-row { height:64px; margin-bottom:6px; }
 
 /* ── conveyor: tokens per second = belt speed ÷ box size. deck.js PLAY.belt moves the boxes at 200 px/s and sizes them
    (--bw, --gap) from the checkpoint bytes; a translated layer avoids a repaint per frame. ── */
@@ -1000,13 +1012,13 @@ body.print *, body.print *::before, body.print *::after, body.motionless #deck,
 .wirebox { position:relative; }
 .gauge { position:absolute; bottom:calc(100% + 6px); left:50%; width:240px; margin-left:-120px; overflow:visible; }
 .gauge path { fill:none; stroke-width:6; stroke-linecap:round; }
-.gauge .g-track { stroke:var(--line); } .gauge .g-spec { stroke:var(--fail); }
-.gauge .g-speclbl { font:600 17px var(--text); fill:var(--fail); }
+.gauge .g-track { stroke:var(--line); } .gauge .g-spec { stroke:var(--soft); }
+.gauge .g-speclbl { font:600 17px var(--text); fill:var(--soft); }
 .gauge .g-needle { stroke:var(--ink); stroke-width:4; stroke-linecap:round; transform-box:view-box; transform-origin:60px 60px; transform:rotate(-90deg); transition:transform var(--bar) var(--ease) .3s; }
 .gauge.on .g-needle { transform:rotate(9deg); }
 .gauge .g-hub { fill:var(--ink); }
 .plain.center { text-align:center; font-family:var(--display); font-size:30px; margin:8px 0 0; }
-.ruler { margin-bottom:30px; }
+.ruler { margin-bottom:0; }
 
 /* ── when FP8 KV pays ── */
 .pays { display:grid; grid-template-columns:560px 1fr; gap:36px; align-items:start; }
@@ -1041,7 +1053,7 @@ body.print *, body.print *::before, body.print *::after, body.motionless #deck,
 .slide.k1 .zb .off { opacity:1; }
 .latent { display:flex; flex-direction:column; gap:8px; margin-top:6px; }
 .lseg { display:flex; height:44px; border-radius:5px; overflow:hidden; border:1px solid var(--line); }
-.lseg i { font-style:normal; display:flex; align-items:center; padding:0 8px; font-size:17px; color:var(--fill-ink); flex:var(--w) 0 0; white-space:nowrap; }
+.lseg i { font-style:normal; display:flex; align-items:center; padding:0 8px; font-size:17px; color:var(--fill-ink); flex:0 0 calc(var(--w) / 656 * 100%); min-width:0; white-space:nowrap; }
 /* labels sit on a plain chip so the dot mark stays under them, not through the text */
 .lseg i span { padding:0 6px; border-radius:4px; background:var(--violet-fill); }
 .lseg .v { background:radial-gradient(circle at 3px 3px, var(--dot) 1.2px, transparent 1.6px) 0 0/7px 7px, var(--violet-fill); } .lseg .s { background:var(--c-stub); } .lseg .r { background:radial-gradient(circle at 3px 3px, var(--dot) 1.2px, transparent 1.6px) 0 0/7px 7px, var(--violet-fill); }
@@ -1283,7 +1295,7 @@ ol.stage.order { justify-content:center; margin-top:0; gap:12px; }
 /* lifecycle: each middle stage in the color it keeps for the rest of the talk */
 .life .st.pf .dot { border-color:var(--amber); } .life .st.pf h3 { color:var(--amber); }
 .life .st.kvw .dot { border-color:var(--violet); } .life .st.kvw h3 { color:var(--violet); }
-.life .st.dc .dot { border-color:var(--steel); } .life .st.dc h3 { color:var(--ink); }
+.life .st.dc .dot { border-color:var(--steel); } .life .st.dc h3 { color:var(--steel); }
 /* Only the narrated stage beats; other stages retain a still frame. */
 .life .st { --beat:var(--c-stub); --beat-glow:var(--glow-steel); }
 .life .st:has(.tokenize), .life .st.stream { --beat:var(--green); --beat-glow:var(--glow-green); }
@@ -1357,7 +1369,7 @@ ol.stage.order { justify-content:center; margin-top:0; gap:12px; }
 .kvpkt i { font-style:normal; padding:6px 12px; border-radius:5px; color:var(--fill-ink); }
 .kvpkt i.k { border:1px solid var(--violet); background:radial-gradient(circle at 3px 3px, var(--dot) 1.2px, transparent 1.6px) 0 0/7px 7px, var(--violet-fill); }
 .kvpkt i.v { background:var(--teal-fill); }
-.pool .cpre { padding:3px 10px; border-radius:6px; font-size:16px; color:var(--fill-ink); border:1px solid var(--violet); background:radial-gradient(circle at 3px 3px, var(--dot) 1.2px, transparent 1.6px) 0 0/7px 7px, var(--violet-fill); }
+.pool .cpre { padding:5px 14px; border-radius:6px; font-size:16px; color:var(--fill-ink); border:1px solid var(--violet); background:radial-gradient(circle at 3px 3px, var(--dot) 1.2px, transparent 1.6px) 0 0/7px 7px, var(--violet-fill); }
 .kpis .k b.ink { color:var(--ink); } .kpis .k b.steel { color:var(--steel); }
 /* slide 37: the three moves stacked, clear of the QR card */
 .end .eq.stack { font-size:34px; line-height:1.25; max-width:640px; }
@@ -1453,7 +1465,7 @@ ol.stage.order { justify-content:center; margin-top:0; gap:12px; }
 .divrow .dpipe .pl { padding:1px 8px; border-radius:7px; background:var(--track); } /* R42: the label stays readable over the parcel */
 .ldkv { position:absolute; left:0; top:372px; width:820px; margin:0; font-size:20px; color:var(--soft); } /* R05: the cache knowledge the title claims */
 .ldwire .draw:not(.on) { visibility:hidden; } /* R14 */
-.ldwire .tip { fill:var(--green); } .ldwire .tip.ctl, .ldwire .tip.poll { fill:var(--mute); } /* R51: arrowheads appear after their line draws */
+.ldwire .tip { fill:var(--mute); stroke:none; stroke-dasharray:none; } /* Arrowheads appear after their line draws. */
 .nl .sym line.ghost.in { display:none; } /* R18: keep only the wasted ghosts */
 .machines2 { align-items:stretch; margin-top:24px; } /* R45 */
 .side.weights .mono { white-space:nowrap; font-size:15px; } /* R46 */
@@ -1466,7 +1478,7 @@ ol.stage.order { justify-content:center; margin-top:0; gap:12px; }
 .tag .nc { text-transform:none; letter-spacing:0; } /* R10: units and names keep their case */
 .pricecard.cool .v { color:var(--steel); transition:color .4s ease 1.4s; } .slide.k1 .pricecard.cool .v { color:var(--green); } /* R44 */
 .fp4-tensor .minis i { border-color:var(--steel); } /* R23 */
-.rl .rdot.tr i[data-l="0.09"]::after { left:auto; right:50%; transform:none; } .rl .rdot.tr i[data-l="0.41"]::after { transform:none; } /* R54 */
+.rl .rdot.tr i[data-l="0.09"]::after { left:auto; right:50%; bottom:26px; transform:none; } .rl .rdot.tr i[data-l="0.41"]::after { transform:none; } /* R54 */
 .tq .hb .b, .accept .am { position:relative; }
 .tq .hb:not(.hot2) .b::before { content:""; position:absolute; left:calc(100% / 2.4); top:-7px; bottom:-7px; border-left:2px dashed var(--mute); } /* R58: bf16 = 1× */
 .accept .am::before { content:""; position:absolute; z-index:1; left:calc(100% / 2.42); top:-4px; bottom:-4px; border-left:2px dashed var(--mute); } /* R59: 1× */
@@ -1479,9 +1491,18 @@ ol.stage.order { justify-content:center; margin-top:0; gap:12px; }
 
 /* ── round 3 ── */
 .mstat span, .verdict span, .life .st p { text-wrap:pretty; } .life .st p { text-wrap:balance; } /* A1-08, A1-09, A1-13 */
-.path span { text-wrap:balance; } /* A3-08 */
+.path span:not(.nw) { text-wrap:balance; } /* A3-08 */
 .ld.epp { border-color:var(--line); } .ld.epp b { color:var(--ink); } /* A2-01: the poll's one-shot glow still marks it */
-.gpus .mb { top:-14px; height:10px; } .gpus .mb::before { width:10px; height:10px; } /* A3-02: clears the heading */
+/* Slide 30: requests enter in blue; green follows the route selection; polling stays neutral. */
+.llmd .ld.client, .llmd .ld.gw { border-color:var(--live); background:color-mix(in srgb, var(--live) 7%, var(--panel)); }
+.llmd .ld.client, .llmd .ld.gw b, .llmd .ld.gw span { color:var(--live); }
+.llmd .ld.epp b { color:var(--green); }
+.llmd .ldwire .draw:first-of-type { stroke:var(--live); }
+.llmd .ldwire .tip:nth-of-type(4) { fill:var(--live); }
+.llmd .ldwire .draw:nth-of-type(2), .llmd .ldwire .draw.ctl { stroke:var(--green); }
+.llmd .ldwire .tip:nth-of-type(5), .llmd .ldwire .tip.ctl, .llmd .ldwire .lbl { fill:var(--green); }
+.llmd .ldkv { color:var(--violet); }
+.gpus .mb { top:8px; height:10px; } .gpus .mb::before { width:10px; height:10px; } /* Mark the active stage inside its GPU box. */
 .verify { z-index:1; } .spec .srow { position:relative; } /* A2-10: kept tokens fall behind the bar */
 .pdsplit .fabric { transition:border-color .6s var(--ease); } .slide:not(.k1) .pdsplit .fabric { border-top-color:color-mix(in srgb, var(--mute) 35%, transparent); } /* A2-07 */
 .end .byline { font-size:24px; } .end .byline b { color:var(--ink); } /* A2-12: the follow-up step, readable from the back */
@@ -1526,14 +1547,15 @@ ol.stage.order { justify-content:center; margin-top:0; gap:12px; }
 .sparkcase .hb.loss .b i { background:var(--amber); }
 .sparkcase .hb.loss em { color:var(--amber); }
 
-.spark-matrix { width:100%; margin:auto 0; border-collapse:collapse; font-size:18px; }
+/* Separate borders reveal with each row instead of showing before its cue. */
+.spark-matrix { width:100%; margin:auto 0; border-collapse:separate; border-spacing:0; font-size:18px; }
 .spark-matrix caption { text-align:left; font-size:16px; color:var(--soft); margin:12px 0; }
 .spark-matrix th { text-align:left; font-weight:600; }
 .spark-matrix thead th { color:var(--soft); padding:10px 6px; border-bottom:1px solid var(--line); }
 .spark-matrix tbody th,.spark-matrix td { padding:11px 6px; border-bottom:1px solid var(--line); }
-.spark-matrix td b { display:block; font:700 27px var(--mono); color:var(--green); }
+.spark-matrix td b { display:block; font:700 27px var(--mono); color:var(--ink); }
 .spark-matrix td small { display:block; margin-top:7px; font:400 16px var(--mono); color:var(--soft); }
-.spark-matrix td.best b { text-decoration:underline; text-underline-offset:5px; }
+.spark-matrix td.best b { color:var(--green); text-decoration:underline; text-underline-offset:5px; }
 .spark-matrix td.loss b,.spark-matrix td.loss small { color:var(--amber); }
 
 /* Slide 02: small mechanisms beneath the five stage descriptions. */
@@ -1577,17 +1599,36 @@ ol.stage.order { justify-content:center; margin-top:0; gap:12px; }
 
 /* Complete examples stay legible alongside their explanation. */
 .fieldkit.self-contained { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:auto auto; gap:14px; align-content:center; }
-.fieldkit.self-contained .code { min-width:0; font-size:13.5px; line-height:1.35; padding:12px; }
+.fieldkit.self-contained .code { min-width:0; font-size:15.5px; line-height:1.5; padding:14px; }
 .fieldkit.self-contained .bytes { grid-row:1 / 3; }
 .kit.complete-command dd { min-width:0; overflow-wrap:anywhere; white-space:pre-wrap; font-size:13.5px; line-height:1.4; overflow:visible; }
 .slide:has(.kit.complete-command) { padding-bottom:220px; }
 
 .slide:has(.slabrow) .kit { bottom:54px; }
 
-/* Slide 20: illustrative one-point loss budget; dots remain observed means. */
+/* Slide 20: illustrative 1.5-point loss budget; dots remain observed means. */
 .qrow.within { --quality:var(--green); }
 .qrow.outside { --quality:var(--fail); }
-.qtrack::after { content:""; position:absolute; top:-6px; bottom:-6px; left:64.2857%; border-left:1px dashed var(--mute); }
+.qtrack::after { content:""; position:absolute; top:-6px; bottom:-6px; left:60.7143%; border-left:1px dashed var(--mute); }
 .qtrack .qdot { z-index:1; }
 .axis2 .budget-cut { color:var(--ink); font-weight:700; }
 .axis2 .baseline { transform:none; }
+
+/* KV payload travels directly from GPU memory through NICs and the RDMA network. */
+.kvshare { display:flex; flex-direction:column; justify-content:center; }
+.kvshare svg { width:100%; height:auto; overflow:visible; }
+.kvshare .share-tier { fill:var(--surface-2); stroke:var(--line); }
+.kvshare .share-nic { fill:var(--panel); }
+.kvshare .share-nic-label { font-size:21px; font-weight:600; }
+.kvshare .share-software-title { font-size:24px; font-weight:600; }
+.kvshare text { fill:var(--ink); font-family:var(--text); }
+.kvshare .share-pod-label { font-size:21px; font-weight:600; }
+.kvshare .share-tier-label { font-size:18px; font-weight:500; }
+.kvshare .share-wire { stroke:var(--violet); stroke-width:2; }
+.kvshare .share-tip { fill:var(--violet); }
+.kvshare .share-wire-label text,.kvshare .share-small { font-size:16px; fill:var(--soft); }
+.kvshare .share-wire-label .share-transport { font-size:24px; font-weight:600; fill:var(--violet); }
+.kvshare .share-wire-label .share-rdma { font-size:20px; fill:var(--ink); }
+.kvshare svg [data-step]:not(.on) { transform:none; }
+.share-rule { font-size:24px; line-height:1.4; text-align:center; color:var(--soft); margin:6px 0 0; }
+.share-rule b { color:var(--ink); }
