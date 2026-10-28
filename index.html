@@ -455,7 +455,7 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </aside>
 </section>
 
-<section class="slide" data-move="4" data-seconds="45" data-coach="Show one value rounded to one tick. If behind, say: 'With scales, four-bit layers use about 4.5 bits per weight; test the quality.' Then Shift+Right.">
+<section class="slide" data-move="4" data-seconds="45" data-coach="Show one value rounded to one tick. A block is sixteen weights sharing one scale. The tensor scale adjusts the whole array's range so its block scales fit in FP8. Reconstruct an approximate weight by multiplying the four-bit value by the block scale and tensor scale. This worked example assumes a tensor scale of one. If behind, say: 'With scales, four-bit layers use about 4.5 bits per weight; test the quality.' Then Shift+Right.">
   <p class="kicker">Movement 4 · lever 2 · how NVFP4 works</p>
   <h2>NVFP4 stores 4-bit values with two levels of scale.</h2>
   <div class="stage fp4">
@@ -471,11 +471,11 @@ MBU = 4.49 ÷ 5.33 ≈ 84%</pre>
   </div>
   <p class="foot">NVIDIA, "Introducing NVFP4" (Jun 2025) · Four Over Six, arXiv:2512.02010. Example block computed by hand, round to nearest; block scale rounded to FP8 (E4M3).</p>
   <aside class="notes">
-    <p>To see what we're giving up, take a group of sixteen weights.</p>
-    <p>[click] We divide by a block scale to bring them into range.</p>
-    <p>[click] Then each value snaps to the nearest available tick. That's where the <strong>rounding error</strong> comes from.</p>
-    <p>[click] We store an eight-bit scale for each block and a thirty-two-bit scale for the whole tensor, the larger weight array, so we can recover the range.</p>
-    <p>[click] With that overhead, storage is about <strong>four and a half bits per weight</strong>, still under a third of bf16. The next question is whether that rounding changes the answers we care about.</p>
+    <p>A <strong>block</strong> is sixteen weights.</p>
+    <p>[click] Its scale is a <strong>shared multiplier</strong>, stored in eight bits. Divide by it to fit the four-bit range.</p>
+    <p>[click] Then round to the nearest available value. That introduces <strong>error</strong>.</p>
+    <p>[click] A thirty-two-bit scale covers the whole tensor, the larger weight array. It adjusts the overall range so <strong>block scales fit in eight bits</strong>. Multiply each stored value by <strong>both scales</strong> to recover an approximate weight.</p>
+    <p>[click] With scales, storage is about <strong>four and a half bits per weight</strong>, under a third of bf16. Now check quality.</p>
   </aside>
 </section>
 
