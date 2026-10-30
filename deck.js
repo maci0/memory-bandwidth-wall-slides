@@ -799,7 +799,10 @@ if (mode === "show" || mode === "presenter") addEventListener("keydown", (e) => 
   jump = ""; clearTimeout(jumpTimer);
   e.preventDefault();
 });
-if (mode === "show") deck.addEventListener("click", (e) => (e.clientX > innerWidth / 3 ? next() : prev()));
+if (mode === "show") deck.addEventListener("click", (e) => {
+  if (e.target instanceof Element && e.target.closest("a")) return;
+  e.clientX > innerWidth / 3 ? next() : prev();
+});
 
 // ── presenter ──
 let t0 = 0, timerPausedAt = 0;
